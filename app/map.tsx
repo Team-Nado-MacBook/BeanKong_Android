@@ -3,6 +3,7 @@ import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { router } from 'expo-router';
 import MapComponent from '@/components/map-component';
 
 export default function MapScreen() {
@@ -22,19 +23,24 @@ export default function MapScreen() {
     setSelectedClassroom(classroom);
   };
 
+  const handleBackToHome = () => {
+    router.back();
+  };
+
   return (
     <View style={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>지도</ThemedText>
-        <TouchableOpacity style={styles.menuButton}>
-          <IconSymbol name="ellipsis" size={24} color="#666666" />
+        <TouchableOpacity onPress={handleBackToHome}>
+          <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
+        <ThemedText style={styles.headerTitle}>지도</ThemedText>
+        <View style={styles.placeholder} />
       </View>
 
       {/* 지도 영역 */}
       <View style={styles.mapContainer}>
-        <MapComponent height={300} />
+        <MapComponent height={400} />
       </View>
 
       {/* 강의실 리스트 */}
@@ -76,6 +82,18 @@ export default function MapScreen() {
           ))}
         </ScrollView>
       </View>
+
+      {/* 하단 네비게이션 */}
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity style={styles.navButton} onPress={handleBackToHome}>
+          <IconSymbol name="heart.fill" size={24} color="#007AFF" />
+          <ThemedText style={styles.navButtonText}>홈</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navButton}>
+          <IconSymbol name="map" size={24} color="#666666" />
+          <ThemedText style={styles.navButtonText}>지도</ThemedText>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -96,15 +114,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5E5',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#000000',
   },
-  menuButton: {
-    padding: 8,
+  placeholder: {
+    width: 24,
   },
   mapContainer: {
-    height: 300,
+    height: 400,
     marginHorizontal: 20,
     marginVertical: 20,
     borderRadius: 12,
@@ -189,5 +207,23 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: '#F0F8FF',
     borderRadius: 6,
+  },
+  bottomNavigation: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  navButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  navButtonText: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 4,
   },
 });

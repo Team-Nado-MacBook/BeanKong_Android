@@ -5,7 +5,7 @@ import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
@@ -18,6 +18,26 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  'ellipsis': 'more-horiz',
+  'calendar': 'event',
+  'exclamationmark': 'error',
+  'clock': 'access-time',
+  'arrow.up': 'keyboard-arrow-up',
+  'arrow.down': 'keyboard-arrow-down',
+  'arrow.up.arrow.down': 'unfold-more',
+  'arrow.up.arrow.down': 'swap-vert',
+  'heart.fill': 'favorite',
+  'map': 'map',
+  'location': 'location-on',
+  'location.circle': 'my-location',
+  'location.fill': 'place',
+  'xmark': 'close',
+  'checkmark': 'check',
+  'trash': 'delete',
+  'plus': 'add',
+  'person.circle': 'account-circle',
+  'search': 'search',
 } as IconMapping;
 
 /**

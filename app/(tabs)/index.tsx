@@ -1,166 +1,453 @@
-import React from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Text, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import MapComponent from '@/components/map-component';
+import { router, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+
+const allUniversityClasses = [
+  { name: '데이타 과학기초', day: '월', startTime: '09:00', endTime: '10:50', classroom: 'IT-5호관 342' },
+  { name: '데이타 베이스', day: '월', startTime: '11:00', endTime: '12:50', classroom: 'IT-5호관 341' },
+  { name: '데이타 통신', day: '화', startTime: '14:00', endTime: '15:50', classroom: 'IT-5호관 340' },
+  { name: '데이타 구조', day: '수', startTime: '10:00', endTime: '11:50', classroom: 'IT-5호관 339' },
+  { name: '데이타 알고리즘', day: '목', startTime: '13:00', endTime: '14:50', classroom: 'IT-5호관 338' },
+  { name: '운영체제', day: '수', startTime: '15:00', endTime: '16:50', classroom: 'IT-5호관 337' },
+  { name: '컴퓨터 구조', day: '화', startTime: '16:00', endTime: '17:50', classroom: 'IT-5호관 336' },
+];
+
+const allClassrooms = [
+  { name: 'IT-5호관 342', latitude: 35.8907, longitude: 128.6117, outlets: ['책상', '벽'] },
+  { name: 'IT-5호관 341', latitude: 35.8908, longitude: 128.6118, outlets: ['책상'] },
+  { name: 'IT-5호관 340', latitude: 35.8909, longitude: 128.6119, outlets: ['벽'] },
+  { name: 'IT-5호관 339', latitude: 35.8910, longitude: 128.6120, outlets: ['책상', '벽'] },
+  { name: 'IT-5호관 338', latitude: 35.8911, longitude: 128.6121, outlets: [] },
+  { name: 'IT-5호관 337', latitude: 35.8912, longitude: 128.6122, outlets: ['책상'] },
+  { name: 'IT-5호관 336', latitude: 35.8913, longitude: 128.6123, outlets: [] },
+];
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  // 빈강의실 데이터 (임시)
-  const emptyClassrooms = [
-    { id: 1, name: '공학관 101호', time: '09:00-11:00', capacity: 50 },
-    { id: 2, name: '공학관 201호', time: '14:00-16:00', capacity: 30 },
-    { id: 3, name: '인문관 301호', time: '10:00-12:00', capacity: 40 },
-    { id: 4, name: '자연관 401호', time: '15:00-17:00', capacity: 60 },
-  ];
+  const [hasTimetable, setHasTimetable] = useState(false);
+  const [nextClass, setNextClass] = useState<any>(null);
+  const [nearestClassroom, setNearestClassroom] = useState<any>(null);
+  const [timetableClasses, setTimetableClasses] = useState<any[]>([]);
 
-  const handleAddSchedule = () => {
-    // 시간표 추가 로직
-    console.log('시간표 추가하기');
-    // TODO: 시간표 추가 모달 또는 화면으로 이동
+  const [selectedStartTime, setSelectedStartTime] = useState<string>('');
+  const [selectedDuration, setSelectedDuration] = useState<string>('');
+  const [selectedOutlets, setSelectedOutlets] = useState<string[]>([]);
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [showDurationModal, setShowDurationModal] = useState(false);
+  const [showOutletModal, setShowOutletModal] = useState(false);
+  const [timeModalType, setTimeModalType] = useState<'start' | 'duration'>('start');
+  
+  const [selectedHour, setSelectedHour] = useState<number>(9);
+  const [selectedMinute, setSelectedMinute] = useState<number>(0);
+  const [selectedDurationHour, setSelectedDurationHour] = useState<number>(1);
+  const [selectedDurationMinute, setSelectedDurationMinute] = useState<number>(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkTimetable = async () => {
+        const savedClasses = await AsyncStorage.getItem('timetableClasses');
+        if (savedClasses) {
+          const classes = JSON.parse(savedClasses);
+          setTimetableClasses(classes);
+          if (classes.length > 0) {
+            setHasTimetable(true);
+            findNextClass(classes);
+            findNearestEmptyClassroom();
+          } else {
+            setHasTimetable(false);
+          }
+        } else {
+          setHasTimetable(false);
+        }
+      };
+      checkTimetable();
+    }, [])
+  );
+
+  const findNextClass = (classes: any[]) => {
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const now = new Date();
+    const currentDay = dayNames[now.getDay()];
+    const currentTime = now.getHours() * 100 + now.getMinutes();
+
+    const sortedClasses = classes
+      .map(c => ({
+        ...c,
+        dayIndex: dayNames.indexOf(c.day),
+        startTimeNum: parseInt(c.startTime.replace(':', ''), 10),
+      }))
+      .sort((a, b) => {
+        if (a.dayIndex !== b.dayIndex) {
+          return a.dayIndex - b.dayIndex;
+        }
+        return a.startTimeNum - b.startTimeNum;
+      });
+
+    let next = null;
+    for (const c of sortedClasses) {
+      if (c.day === currentDay && c.startTimeNum > currentTime) {
+        next = c;
+        break;
+      }
+    }
+    if (!next) {
+      for (const c of sortedClasses) {
+        if (c.dayIndex > dayNames.indexOf(currentDay)) {
+          next = c;
+          break;
+        }
+      }
+    }
+    if (!next && sortedClasses.length > 0) {
+      next = sortedClasses[0];
+    }
+    setNextClass(next);
   };
 
-  const handleClassroomPress = (classroom: any) => {
-    // 강의실 상세 정보 보기
-    console.log('강의실 선택:', classroom.name);
-    // TODO: 강의실 상세 정보 모달 또는 화면으로 이동
+  const findNearestEmptyClassroom = async () => {
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setNearestClassroom({ name: '위치 권한 필요', distance: '' });
+      return;
+    }
+
+    let location = await Location.getCurrentPositionAsync({});
+    const userLat = location.coords.latitude;
+    const userLon = location.coords.longitude;
+
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const now = new Date();
+    const currentDay = dayNames[now.getDay()];
+    const currentTime = now.getHours() * 100 + now.getMinutes();
+
+    const emptyClassrooms = allClassrooms.filter(classroom => {
+      const isOccupied = allUniversityClasses.some(c => {
+        const startTimeNum = parseInt(c.startTime.replace(':', ''), 10);
+        const endTimeNum = parseInt(c.endTime.replace(':', ''), 10);
+        return c.classroom === classroom.name && c.day === currentDay &&
+               currentTime >= startTimeNum && currentTime < endTimeNum;
+      });
+      return !isOccupied;
+    });
+
+    if (emptyClassrooms.length === 0) {
+      setNearestClassroom({ name: '빈 강의실 없음', distance: '' });
+      return;
+    }
+
+    const classroomsWithDistance = emptyClassrooms.map(classroom => {
+      const distance = getDistance(userLat, userLon, classroom.latitude, classroom.longitude);
+      return { ...classroom, distance };
+    });
+
+    classroomsWithDistance.sort((a, b) => a.distance - b.distance);
+
+    const nearest = classroomsWithDistance[0];
+    setNearestClassroom({
+      name: nearest.name,
+      distance: `${Math.round(nearest.distance * 1000)}m`,
+    });
   };
+
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const deg2rad = (deg: number) => deg * (Math.PI / 180);
+
+  const handleTimetablePress = () => router.push('/timetable');
+  const handleStartTimePress = () => { setTimeModalType('start'); setShowTimeModal(true); };
+  const handleDurationPress = () => { setTimeModalType('duration'); setShowDurationModal(true); };
+  const handleOutletPress = () => setShowOutletModal(true);
+
+  const handleTimeSelect = () => {
+    const timeString = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
+    if (timeModalType === 'start') {
+      setSelectedStartTime(timeString);
+    } else {
+      setSelectedDuration(timeString);
+    }
+    setShowTimeModal(false);
+    setShowDurationModal(false);
+  };
+
+  const handleDurationSelect = () => {
+    let durationString = '';
+    if (selectedDurationHour > 0 && selectedDurationMinute > 0) {
+      durationString = `${selectedDurationHour}h ${selectedDurationMinute}m`;
+    } else if (selectedDurationHour > 0) {
+      durationString = `${selectedDurationHour}h`;
+    } else if (selectedDurationMinute > 0) {
+      durationString = `${selectedDurationMinute}m`;
+    }
+    setSelectedDuration(durationString);
+    setShowDurationModal(false);
+  };
+
+  const handleOutletSelect = (outlet: string) => {
+    if (outlet === '없음') {
+      setSelectedOutlets([]);
+      setShowOutletModal(false);
+    } else {
+      if (selectedOutlets.includes(outlet)) {
+        setSelectedOutlets(selectedOutlets.filter(item => item !== outlet));
+      } else {
+        const newOutlets = [...selectedOutlets, outlet];
+        setSelectedOutlets(newOutlets);
+        if (newOutlets.includes('책상') && newOutlets.includes('벽')) {
+          setShowOutletModal(false);
+        }
+      }
+    }
+  };
+
+  const handleMapPress = () => router.push('/map');
+  const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.name);
+
+  const outletOptions = ['책상', '벽', '없음'];
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 상단 프로필 아이콘 */}
+    <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.profileButton}>
-          <IconSymbol name="person.circle" size={24} color={colors.text} />
+        <ThemedText style={styles.title}>BeanKong</ThemedText>
+        <TouchableOpacity style={styles.menuButton} onPress={handleTimetablePress}>
+          <IconSymbol name="ellipsis" size={24} color="#666666" />
         </TouchableOpacity>
       </View>
 
-      {/* 시간표 추가 버튼 */}
-      <TouchableOpacity style={[styles.addScheduleButton, { backgroundColor: colors.background }]} onPress={handleAddSchedule}>
-        <IconSymbol name="plus" size={24} color={colors.text} />
-        <ThemedText style={styles.addScheduleText}>내 시간표 추가하기</ThemedText>
-      </TouchableOpacity>
+      {hasTimetable ? (
+        <View style={styles.twoBoxesContainer}>
+          <View style={styles.box}>
+            <ThemedText style={styles.boxTitle}>다음 강의</ThemedText>
+            {nextClass ? (
+              <>
+                <ThemedText style={styles.boxText}>{nextClass.name}</ThemedText>
+                <ThemedText style={styles.boxSubText}>{nextClass.day} {nextClass.startTime}</ThemedText>
+              </>
+            ) : (
+              <ThemedText style={styles.boxText}>오늘 남은 강의가 없습니다.</ThemedText>
+            )}
+          </View>
+          <View style={styles.box}>
+            <ThemedText style={styles.boxTitle}>가까운 빈 강의실</ThemedText>
+            {nearestClassroom ? (
+              <>
+                <ThemedText style={styles.boxText}>{nearestClassroom.name}</ThemedText>
+                <ThemedText style={styles.boxSubText}>{nearestClassroom.distance}</ThemedText>
+              </>
+            ) : (
+              <ThemedText style={styles.boxText}>찾는 중...</ThemedText>
+            )}
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.timetableCard} onPress={handleTimetablePress}>
+          <View style={styles.timetableIconContainer}>
+            <IconSymbol name="calendar" size={32} color="#666666" />
+            <IconSymbol name="exclamationmark" size={16} color="#FF3B30" style={styles.exclamationIcon} />
+          </View>
+          <ThemedText style={styles.timetableText}>시간표를 입력하세요</ThemedText>
+        </TouchableOpacity>
+      )}
 
-      {/* 지도 섹션 */}
-      <ThemedView style={styles.mapContainer}>
-        <ThemedText style={styles.sectionTitle}>지도</ThemedText>
-        <MapComponent height={200} />
-      </ThemedView>
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
+        <View style={styles.filterContainer}>
+          <View style={styles.sortIcon}>
+            <IconSymbol name="arrow.up.arrow.down" size={16} color="#666666" />
+          </View>
+          <TouchableOpacity style={styles.filterButton} onPress={handleStartTimePress}>
+            <IconSymbol name="clock" size={16} color="#666666" />
+            <ThemedText style={[styles.filterButtonText, selectedStartTime && styles.selectedFilterText]}>
+              {selectedStartTime || '시작 시간'}
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterButton} onPress={handleDurationPress}>
+            <ThemedText style={[styles.filterButtonText, selectedDuration && styles.selectedFilterText]}>
+              {selectedDuration || '사용 시간'}
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterButton} onPress={handleOutletPress}>
+            <ThemedText style={[styles.filterButtonText, selectedOutlets.length > 0 && styles.selectedFilterText]}>
+              {selectedOutlets.length > 0 ? selectedOutlets.join(', ') : '콘센트'}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.classroomList}>
+          {allClassrooms.map((classroom) => (
+            <TouchableOpacity key={classroom.name} style={styles.classroomItem} onPress={() => handleClassroomPress(classroom)} activeOpacity={0.7}>
+              <View style={styles.classroomInfo}>
+                <ThemedText style={styles.classroomName}>{classroom.name}</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.detailButton}>
+                <ThemedText style={styles.detailButtonText}>상세정보 ></ThemedText>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {/* 빈강의실 섹션 */}
-      <ThemedView style={styles.classroomContainer}>
-        <ThemedText style={styles.sectionTitle}>빈강의실</ThemedText>
-        {emptyClassrooms.map((classroom) => (
-          <TouchableOpacity 
-            key={classroom.id} 
-            style={[styles.classroomItem, { backgroundColor: colors.background }]}
-            onPress={() => handleClassroomPress(classroom)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.classroomInfo}>
-              <ThemedText style={styles.classroomName}>{classroom.name}</ThemedText>
-              <ThemedText style={styles.classroomTime}>{classroom.time}</ThemedText>
+      <View style={styles.floatingNavigation}>
+        <TouchableOpacity style={[styles.floatingButton, styles.activeFloatingButton]}>
+          <IconSymbol name="heart.fill" size={20} color="#FFFFFF"/>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.floatingButton} onPress={handleMapPress}>
+          <IconSymbol name="map" size={20} color="#666666" />
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={showTimeModal} transparent animationType="slide">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowTimeModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>시작 시간 선택</ThemedText>
+              <TouchableOpacity onPress={() => setShowTimeModal(false)}><IconSymbol name="xmark" size={24} color="#666666" /></TouchableOpacity>
             </View>
-            <View style={styles.classroomCapacity}>
-              <ThemedText style={styles.capacityText}>{classroom.capacity}명</ThemedText>
-              <IconSymbol name="chevron.right" size={16} color="#999" />
+            <View style={styles.dialContainer}>
+              <View style={styles.dialColumn}>
+                <ThemedText style={styles.dialLabel}>시간</ThemedText>
+                <ScrollView style={styles.dialScroll} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 12 }, (_, i) => i + 9).map((hour) => (
+                    <TouchableOpacity key={hour} style={[styles.dialItem, selectedHour === hour && styles.selectedDialItem]} onPress={() => setSelectedHour(hour)}>
+                      <ThemedText style={[styles.dialItemText, selectedHour === hour && styles.selectedDialItemText]}>{hour.toString().padStart(2, '0')}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.dialColumn}>
+                <ThemedText style={styles.dialLabel}>분</ThemedText>
+                <ScrollView style={styles.dialScroll} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 6 }, (_, i) => i * 10).map((minute) => (
+                    <TouchableOpacity key={minute} style={[styles.dialItem, selectedMinute === minute && styles.selectedDialItem]} onPress={() => setSelectedMinute(minute)}>
+                      <ThemedText style={[styles.dialItemText, selectedMinute === minute && styles.selectedDialItemText]}>{minute.toString().padStart(2, '0')}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.confirmButton} onPress={handleTimeSelect}><ThemedText style={styles.confirmButtonText}>확인</ThemedText></TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showDurationModal} transparent animationType="slide">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowDurationModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>사용 시간 선택</ThemedText>
+              <TouchableOpacity onPress={() => setShowDurationModal(false)}><IconSymbol name="xmark" size={24} color="#666666" /></TouchableOpacity>
+            </View>
+            <View style={styles.dialContainer}>
+              <View style={styles.dialColumn}>
+                <ThemedText style={styles.dialLabel}>시간</ThemedText>
+                <ScrollView style={styles.dialScroll} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 8 }, (_, i) => i + 1).map((hour) => (
+                    <TouchableOpacity key={hour} style={[styles.dialItem, selectedDurationHour === hour && styles.selectedDialItem]} onPress={() => setSelectedDurationHour(hour)}>
+                      <ThemedText style={[styles.dialItemText, selectedDurationHour === hour && styles.selectedDialItemText]}>{hour}시간</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.dialColumn}>
+                <ThemedText style={styles.dialLabel}>분</ThemedText>
+                <ScrollView style={styles.dialScroll} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 6 }, (_, i) => i * 10).map((minute) => (
+                    <TouchableOpacity key={minute} style={[styles.dialItem, selectedDurationMinute === minute && styles.selectedDialItem]} onPress={() => setSelectedDurationMinute(minute)}>
+                      <ThemedText style={[styles.dialItemText, selectedDurationMinute === minute && styles.selectedDialItemText]}>{minute}분</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.confirmButton} onPress={handleDurationSelect}><ThemedText style={styles.confirmButtonText}>확인</ThemedText></TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showOutletModal} transparent animationType="slide">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowOutletModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>콘센트 선택</ThemedText>
+              <TouchableOpacity onPress={() => setShowOutletModal(false)}><IconSymbol name="xmark" size={24} color="#666666" /></TouchableOpacity>
+            </View>
+            <View style={styles.modalList}>
+              {outletOptions.map((option) => (
+                <TouchableOpacity key={option} style={[styles.modalItem, selectedOutlets.includes(option) && styles.selectedItem]} onPress={() => handleOutletSelect(option)}>
+                  <ThemedText style={[styles.modalItemText, selectedOutlets.includes(option) && styles.selectedItemText]}>{option}</ThemedText>
+                  {selectedOutlets.includes(option) && <IconSymbol name="checkmark" size={20} color="#007AFF"/>}
+                </TouchableOpacity>
+              ))}
             </View>
           </TouchableOpacity>
-        ))}
-      </ThemedView>
-    </ScrollView>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
-  profileButton: {
-    padding: 8,
-  },
-  addScheduleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  addScheduleText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  mapContainer: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#666',
-  },
-  classroomContainer: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  classroomItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  classroomInfo: {
-    flex: 1,
-  },
-  classroomName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  classroomTime: {
-    fontSize: 14,
-    color: '#666',
-  },
-  classroomCapacity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  capacityText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-    marginRight: 4,
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 45, paddingBottom: 20 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#000000', paddingBottom: 1},
+  menuButton: { padding: 8 },
+  timetableCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 30, paddingVertical: 40, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 5 },
+  timetableText: { fontSize: 16, color: '#666666', marginTop: 12 },
+  timetableIconContainer: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  exclamationIcon: { position: 'absolute', top: -4, right: -4 },
+  twoBoxesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 20, marginBottom: 30 },
+  box: { backgroundColor: '#FFFFFF', width: '48%', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 5 },
+  boxTitle: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 10 },
+  boxText: { fontSize: 14, color: '#333333' },
+  boxSubText: { fontSize: 12, color: '#999999', marginTop: 5 },
+  section: { flex: 1, paddingHorizontal: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#000000', marginBottom: 16 },
+  filterContainer: { flexDirection: 'row', marginBottom: 20, gap: 8 },
+  sortIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2 },
+  filterButton: { flex: 1, height: 40, backgroundColor: '#F5F5F5', borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, flexDirection: 'row', gap: 4 },
+  filterButtonText: { fontSize: 14, color: '#666666' },
+  selectedFilterText: { color: '#007AFF', fontWeight: '500' },
+  classroomList: { flex: 1 },
+  classroomItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E5E5' },
+  classroomInfo: { flex: 1 },
+  classroomName: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 4 },
+  classroomDistance: { fontSize: 14, color: '#666666' },
+  detailButton: { paddingHorizontal: 12, paddingVertical: 8 },
+  detailButtonText: { fontSize: 14, color: '#666666' },
+  floatingNavigation: { position: 'absolute', bottom: 70, left: 20, flexDirection: 'row', gap: 8 },
+  floatingButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, borderWidth: 1, borderColor: '#E5E5E5' },
+  activeFloatingButton: { backgroundColor: '#007AFF' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#E5E5E5' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#000000' },
+  modalList: { paddingVertical: 8 },
+  modalItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  selectedItem: { backgroundColor: '#F0F8FF' },
+  modalItemText: { fontSize: 16, color: '#000000' },
+  selectedItemText: { color: '#007AFF', fontWeight: '500' },
+  dialContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 20, gap: 20 },
+  dialColumn: { flex: 1, alignItems: 'center' },
+  dialLabel: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 12 },
+  dialScroll: { height: 200, width: '100%' },
+  dialItem: { height: 50, justifyContent: 'center', alignItems: 'center', marginVertical: 2, borderRadius: 8 },
+  selectedDialItem: { backgroundColor: '#F0F8FF' },
+  dialItemText: { fontSize: 18, color: '#666666' },
+  selectedDialItemText: { color: '#007AFF', fontWeight: '600' },
+  confirmButton: { backgroundColor: '#007AFF', marginHorizontal: 20, marginBottom: 20, height: 50, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  confirmButtonText: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
 });
