@@ -7,11 +7,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import * as Location from 'expo-location';
 
-interface MapComponentProps {
-  height?: number;
-}
+interface MapComponentProps {}
 
-export default function MapComponent({ height = 200 }: MapComponentProps) {
+export default function MapComponent({}: MapComponentProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   
@@ -94,7 +92,7 @@ export default function MapComponent({ height = 200 }: MapComponentProps) {
   };
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={styles.container}>
       {location ? (
         <View style={styles.mapContainer}>
           <WebView
@@ -136,18 +134,7 @@ export default function MapComponent({ height = 200 }: MapComponentProps) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    flex: 1,
   },
   mapContainer: {
     flex: 1,
