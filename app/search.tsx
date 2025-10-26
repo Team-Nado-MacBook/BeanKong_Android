@@ -1,156 +1,176 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, TouchableOpacity, View, TextInput, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { searchCourses, Course } from '../database';
 
-interface SearchClass {
-  id: string;
-  name: string;
-  code: string;
-  day: string;
-  startTime: string;
-  endTime: string;
+// Debounce hook for search input
+function useDebounce(value: string, delay: number): string {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
 }
+
+// Maps schedule time blocks to actual start/end times
+const timeBlockMap: { [key: string]: { startTime: string; endTime: string } } = {
+    '1A,1B,2A': { startTime: '09:00', endTime: '10:15' },
+    '2B,3A,3B': { startTime: '10:30', endTime: '11:45' },
+    '4A,4B,5A': { startTime: '12:00', endTime: '13:15' },
+    '5B,6A,6B': { startTime: '13:30', endTime: '14:45' },
+    '7A,7B,8A': { startTime: '15:00', endTime: '16:15' },
+    '8B,9A,9B': { startTime: '16:30', endTime: '17:45' },
+    '10A,10B,11A': { startTime: '18:00', endTime: '19:15' },
+    '11B,12A,12B': { startTime: '19:30', endTime: '20:45' },
+};
+
+const dayMap: { [key: string]: string } = {
+    mon: '월',
+    tue: '화',
+    wed: '수',
+    thu: '목',
+    fri: '금',
+};
 
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<SearchClass[]>([]);
+  const [searchResults, setSearchResults] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // 임시 검색 데이터
-  const allClasses: SearchClass[] = [
-    { id: '1', name: '데이타 과학기초', code: 'comp3434-002', day: '월', startTime: '09:00', endTime: '10:50' },
-    { id: '2', name: '데이타 베이스', code: 'comp3434-001', day: '월', startTime: '11:00', endTime: '12:50' },
-    { id: '3', name: '데이타 통신', code: 'comp3434-003', day: '화', startTime: '14:00', endTime: '15:50' },
-    { id: '4', name: '데이타 구조', code: 'comp3434-004', day: '수', startTime: '10:00', endTime: '11:50' },
-    { id: '5', name: '데이타 알고리즘', code: 'comp3434-005', day: '목', startTime: '13:00', endTime: '14:50' },
-    { id: '6', name: '데이타 마이닝', code: 'comp3434-006', day: '금', startTime: '09:00', endTime: '10:50' },
-    { id: '7', name: '데이타 분석', code: 'comp3434-007', day: '금', startTime: '13:00', endTime: '14:50' },
-    { id: '8', name: '운영체제', code: 'comp3210-001', day: '수', startTime: '15:00', endTime: '16:50' },
-    { id: '9', name: '컴퓨터 구조', code: 'comp3110-001', day: '화', startTime: '16:00', endTime: '17:50' },
-  ];
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.trim() === '') {
+        setSearchResults([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const results = await searchCourses(debouncedSearchQuery);
+        setSearchResults(results);
+      } catch (error) {
+        Alert.alert('오류', '강의 검색에 실패했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    performSearch();
+  }, [debouncedSearchQuery]);
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    if (query.trim() === '') {
-      setSearchResults([]);
-      return;
-    }
-
-    const filtered = allClasses.filter(cls => 
-      cls.name.toLowerCase().includes(query.toLowerCase()) ||
-      cls.code.toLowerCase().includes(query.toLowerCase())
-    );
-    setSearchResults(filtered);
-  };
-
-  const handleAddClass = async (classItem: SearchClass) => {
+  const handleAddClass = async (course: Course) => {
     try {
-      const existingClasses = await AsyncStorage.getItem('timetableClasses');
-      let classes = existingClasses ? JSON.parse(existingClasses) : [];
+      const existingClassesStr = await AsyncStorage.getItem('timetableClasses');
+      let existingClasses = existingClassesStr ? JSON.parse(existingClassesStr) : [];
+      
+      const schedule = JSON.parse(course.schedule);
 
-      // Check for conflicts
-      const newClassStartTime = parseInt(classItem.startTime.replace(':', ''), 10);
-      const newClassEndTime = parseInt(classItem.endTime.replace(':', ''), 10);
+      for (const entry of schedule) {
+        const timeKey = entry.time.join(',');
+        const timeInfo = timeBlockMap[timeKey];
+        
+        if (!timeInfo) continue; // Skip if time block is not defined
 
-      const conflictingClass = classes.find((c: any) => {
-        if (c.day !== classItem.day) {
-          return false;
-        }
-        const existingClassStartTime = parseInt(c.startTime.replace(':', ''), 10);
-        const existingClassEndTime = parseInt(c.endTime.replace(':', ''), 10);
+        const newClass = {
+            id: `${course.class_id}-${entry.day}`,
+            name: course.subject,
+            code: course.class_id,
+            day: dayMap[entry.day] || entry.day,
+            startTime: timeInfo.startTime,
+            endTime: timeInfo.endTime,
+            color: '#FFE4B5' // Default color
+        };
 
-        return (
-          (newClassStartTime < existingClassEndTime && newClassEndTime > existingClassStartTime)
-        );
-      });
+        // Remove any class that conflicts with the new class time on the same day
+        const newStartTime = parseInt(newClass.startTime.replace(':', ''), 10);
+        const newEndTime = parseInt(newClass.endTime.replace(':', ''), 10);
 
-      if (conflictingClass) {
-        // Remove conflicting class
-        classes = classes.filter((c: any) => c.id !== conflictingClass.id);
+        existingClasses = existingClasses.filter((c: any) => {
+            if (c.day !== newClass.day) return true; // Keep classes on other days
+            const existingStartTime = parseInt(c.startTime.replace(':', ''), 10);
+            const existingEndTime = parseInt(c.endTime.replace(':', ''), 10);
+            // Return false (remove) if there is a time overlap
+            return !(newStartTime < existingEndTime && newEndTime > existingStartTime);
+        });
+
+        // Add the new class
+        existingClasses.push(newClass);
       }
 
-      // Add the new class
-      const newClass = {
-        id: Date.now().toString(),
-        name: classItem.name,
-        code: classItem.code,
-        day: classItem.day,
-        startTime: classItem.startTime,
-        endTime: classItem.endTime,
-        color: '#FFE4B5'
-      };
-      const updatedClasses = [...classes, newClass];
-
-      await AsyncStorage.setItem('timetableClasses', JSON.stringify(updatedClasses));
-
-      Alert.alert('추가 완료', `${classItem.name} 수업이 시간표에 추가되었습니다.`);
+      await AsyncStorage.setItem('timetableClasses', JSON.stringify(existingClasses));
+      Alert.alert('추가 완료', `${course.subject} 수업이 시간표에 추가되었습니다.`);
       router.back();
+
     } catch (error) {
+      console.error("Failed to add class:", error);
       Alert.alert('오류', '수업 추가에 실패했습니다.');
     }
   };
 
+  const renderResultItem = ({ item }: { item: Course }) => (
+    <TouchableOpacity
+      style={styles.resultItem}
+      onPress={() => handleAddClass(item)}
+    >
+      <View style={styles.classInfo}>
+        <ThemedText style={styles.className}>{item.subject}</ThemedText>
+        <ThemedText style={styles.classCode}>{item.class_id} / {item.building} {item.room}호</ThemedText>
+      </View>
+      <View style={styles.addButton}>
+        <ThemedText style={styles.addButtonText}>추가하기</ThemedText>
+        <IconSymbol name="chevron.right" size={16} color="#666666" />
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>검색</ThemedText>
+        <ThemedText style={styles.headerTitle}>강의 검색</ThemedText>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* 검색 입력 */}
+      <View style={styles.content}>
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={setSearchQuery}
             placeholder="수업명 또는 과목코드로 검색"
             placeholderTextColor="#999999"
+            autoFocus
           />
           <IconSymbol name="search" size={20} color="#666666" />
         </View>
 
-        {/* 검색 결과 */}
-        {searchQuery.trim() !== '' && (
-          <View style={styles.resultsContainer}>
-            <ThemedText style={styles.resultsTitle}>검색결과</ThemedText>
-            <ThemedView style={styles.resultsList}>
-              {searchResults.map((classItem) => (
-                <TouchableOpacity
-                  key={classItem.id}
-                  style={styles.resultItem}
-                  onPress={() => handleAddClass(classItem)}
-                >
-                  <View style={styles.classInfo}>
-                    <ThemedText style={styles.className}>{classItem.name}</ThemedText>
-                    <ThemedText style={styles.classCode}>{classItem.code}</ThemedText>
-                  </View>
-                  <View style={styles.addButton}>
-                    <ThemedText style={styles.addButtonText}>추가하기</ThemedText>
-                    <IconSymbol name="chevron.right" size={16} color="#666666" />
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ThemedView>
-          </View>
+        {isLoading ? (
+            <ActivityIndicator style={{ marginTop: 20 }} />
+        ) : (
+            <FlatList
+                data={searchResults}
+                renderItem={renderResultItem}
+                keyExtractor={(item) => item.id!.toString()}
+                style={styles.resultsList}
+                ListHeaderComponent={searchResults.length > 0 ? <ThemedText style={styles.resultsTitle}>검색결과</ThemedText> : null}
+            />
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -161,18 +181,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  placeholder: {
-    width: 24,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#000000' },
+  placeholder: { width: 24 },
+  content: { flex: 1, paddingHorizontal: 20 },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -184,26 +195,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 8,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#000000',
-  },
-  resultsContainer: {
-    marginTop: 20,
-  },
-  resultsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
-  },
-  resultsList: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    overflow: 'hidden',
-  },
+  searchInput: { flex: 1, fontSize: 16, color: '#000000' },
+  resultsList: { marginTop: 20 },
+  resultsTitle: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 12 },
   resultItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -212,28 +206,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
-  classInfo: {
-    flex: 1,
-  },
-  className: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  classCode: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  addButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
+  classInfo: { flex: 1, marginRight: 10 },
+  className: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 4 },
+  classCode: { fontSize: 14, color: '#666666' },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  addButtonText: { fontSize: 14, color: '#007AFF', fontWeight: '500' },
 });
