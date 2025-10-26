@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Text, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,26 +8,38 @@ import { Colors } from '@/constants/theme';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { setupDatabase, getAllClassrooms, Classroom } from '../../database';
 
-const allUniversityClasses = [
-  { name: '데이타 과학기초', day: '월', startTime: '09:00', endTime: '10:50', classroom: 'IT-5호관 342' },
-  { name: '데이타 베이스', day: '월', startTime: '11:00', endTime: '12:50', classroom: 'IT-5호관 341' },
-  { name: '데이타 통신', day: '화', startTime: '14:00', endTime: '15:50', classroom: 'IT-5호관 340' },
-  { name: '데이타 구조', day: '수', startTime: '10:00', endTime: '11:50', classroom: 'IT-5호관 339' },
-  { name: '데이타 알고리즘', day: '목', startTime: '13:00', endTime: '14:50', classroom: 'IT-5호관 338' },
-  { name: '운영체제', day: '수', startTime: '15:00', endTime: '16:50', classroom: 'IT-5호관 337' },
-  { name: '컴퓨터 구조', day: '화', startTime: '16:00', endTime: '17:50', classroom: 'IT-5호관 336' },
+const timePeriods = [
+    { start: "08:00", end: "08:50", periods: ["0"] },
+    { start: "09:00", end: "09:50", periods: ["1A", "1B"] },
+    { start: "10:00", end: "10:50", periods: ["2A", "2B"] },
+    { start: "11:00", end: "11:50", periods: ["3A", "3B"] },
+    { start: "12:00", end: "12:50", periods: ["4A", "4B"] },
+    { start: "13:00", end: "13:50", periods: ["5A", "5B"] },
+    { start: "14:00", end: "14:50", periods: ["6A", "6B"] },
+    { start: "15:00", end: "15:50", periods: ["7A", "7B"] },
+    { start: "16:00", end: "16:50", periods: ["8A", "8B"] },
+    { start: "17:00", end: "17:50", periods: ["9A", "9B"] },
+    { start: "18:00", end: "18:50", periods: ["10A", "10B"] },
+    { start: "19:00", end: "19:50", periods: ["11A", "11B"] },
+    { start: "20:00", end: "20:50", periods: ["12A", "12B"] },
+    { start: "21:00", end: "21:50", periods: ["13A", "13B"] },
 ];
 
-const allClassrooms = [
-  { name: 'IT-5호관 342', latitude: 35.8907, longitude: 128.6117, outlets: ['책상', '벽'] },
-  { name: 'IT-5호관 341', latitude: 35.8908, longitude: 128.6118, outlets: ['책상'] },
-  { name: 'IT-5호관 340', latitude: 35.8909, longitude: 128.6119, outlets: ['벽'] },
-  { name: 'IT-5호관 339', latitude: 35.8910, longitude: 128.6120, outlets: ['책상', '벽'] },
-  { name: 'IT-5호관 338', latitude: 35.8911, longitude: 128.6121, outlets: [] },
-  { name: 'IT-5호관 337', latitude: 35.8912, longitude: 128.6122, outlets: ['책상'] },
-  { name: 'IT-5호관 336', latitude: 35.8913, longitude: 128.6123, outlets: [] },
-];
+function getCurrentPeriods() {
+    const now = new Date();
+    const currentTime = now.getHours() * 100 + now.getMinutes();
+
+    for (const slot of timePeriods) {
+        const startTime = parseInt(slot.start.replace(':', ''), 10);
+        const endTime = parseInt(slot.end.replace(':', ''), 10);
+        if (currentTime >= startTime && currentTime < endTime) {
+            return slot.periods;
+        }
+    }
+    return []; // In-between classes
+}
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -37,6 +49,7 @@ export default function HomeScreen() {
   const [nextClass, setNextClass] = useState<any>(null);
   const [nearestClassroom, setNearestClassroom] = useState<any>(null);
   const [timetableClasses, setTimetableClasses] = useState<any[]>([]);
+  const [emptyClassrooms, setEmptyClassrooms] = useState<Classroom[]>([]);
 
   const [selectedStartTime, setSelectedStartTime] = useState<string>('');
   const [selectedDuration, setSelectedDuration] = useState<string>('');
@@ -61,7 +74,6 @@ export default function HomeScreen() {
           if (classes.length > 0) {
             setHasTimetable(true);
             findNextClass(classes);
-            findNearestEmptyClassroom();
           } else {
             setHasTimetable(false);
           }
@@ -69,9 +81,46 @@ export default function HomeScreen() {
           setHasTimetable(false);
         }
       };
+      
+      const loadClassrooms = () => {
+        try {
+          setupDatabase();
+          const allClassroomsFromDB = getAllClassrooms();
+          findEmptyClassrooms(allClassroomsFromDB);
+        } catch (e) {
+          console.error("Full error loading classrooms:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
+          Alert.alert("데이터베이스 오류", "강의실 정보를 불러오는 데 실패했습니다.");
+        }
+      };
+
       checkTimetable();
+      loadClassrooms();
     }, [])
   );
+
+  const findEmptyClassrooms = (allClassrooms: Classroom[]) => {
+    const currentPeriods = getCurrentPeriods();
+    const dayMapping = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
+
+    if (currentPeriods.length === 0 || !currentDayKey || !['mon', 'tue', 'wed', 'thu', 'fri'].includes(currentDayKey)) {
+        setEmptyClassrooms(allClassrooms);
+        return;
+    }
+
+    const empty = allClassrooms.filter(classroom => {
+        try {
+            const daySchedule = JSON.parse(classroom[currentDayKey] as string);
+            if (!Array.isArray(daySchedule)) return true;
+            const isOccupied = daySchedule.some((classPeriod: string) => currentPeriods.includes(classPeriod));
+            return !isOccupied;
+        } catch (e) {
+            return true; // If JSON is invalid, assume it's empty
+        }
+    });
+
+    setEmptyClassrooms(empty);
+  };
 
   const findNextClass = (classes: any[]) => {
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -124,28 +173,13 @@ export default function HomeScreen() {
     const userLat = location.coords.latitude;
     const userLon = location.coords.longitude;
 
-    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    const now = new Date();
-    const currentDay = dayNames[now.getDay()];
-    const currentTime = now.getHours() * 100 + now.getMinutes();
-
-    const emptyClassrooms = allClassrooms.filter(classroom => {
-      const isOccupied = allUniversityClasses.some(c => {
-        const startTimeNum = parseInt(c.startTime.replace(':', ''), 10);
-        const endTimeNum = parseInt(c.endTime.replace(':', ''), 10);
-        return c.classroom === classroom.name && c.day === currentDay &&
-               currentTime >= startTimeNum && currentTime < endTimeNum;
-      });
-      return !isOccupied;
-    });
-
     if (emptyClassrooms.length === 0) {
       setNearestClassroom({ name: '빈 강의실 없음', distance: '' });
       return;
     }
 
     const classroomsWithDistance = emptyClassrooms.map(classroom => {
-      const distance = getDistance(userLat, userLon, classroom.latitude, classroom.longitude);
+      const distance = getDistance(userLat, userLon, classroom.lat, classroom.lng);
       return { ...classroom, distance };
     });
 
@@ -153,10 +187,16 @@ export default function HomeScreen() {
 
     const nearest = classroomsWithDistance[0];
     setNearestClassroom({
-      name: nearest.name,
+      name: `${nearest.building_name} ${nearest.room_number}`,
       distance: `${Math.round(nearest.distance * 1000)}m`,
     });
   };
+
+  useEffect(() => {
+    if (emptyClassrooms.length > 0) {
+      findNearestEmptyClassroom();
+    }
+  }, [emptyClassrooms]);
 
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;
@@ -216,7 +256,7 @@ export default function HomeScreen() {
   };
 
   const handleMapPress = () => router.push('/map');
-  const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.name);
+  const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.building_name, classroom.room_number);
 
   const outletOptions = ['책상', '벽', '없음'];
 
@@ -288,10 +328,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.classroomList}>
-          {allClassrooms.map((classroom) => (
-            <TouchableOpacity key={classroom.name} style={styles.classroomItem} onPress={() => handleClassroomPress(classroom)} activeOpacity={0.7}>
+          {emptyClassrooms.map((classroom) => (
+            <TouchableOpacity key={classroom.id} style={styles.classroomItem} onPress={() => handleClassroomPress(classroom)} activeOpacity={0.7}>
               <View style={styles.classroomInfo}>
-                <ThemedText style={styles.classroomName}>{classroom.name}</ThemedText>
+                <ThemedText style={styles.classroomName}>{`${classroom.building_name} ${classroom.room_number}`}</ThemedText>
               </View>
               <TouchableOpacity style={styles.detailButton}>
                 <ThemedText style={styles.detailButtonText}>상세정보 ></ThemedText>
