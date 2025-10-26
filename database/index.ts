@@ -2,10 +2,9 @@ import * as SQLite from 'expo-sqlite';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
-function getDb(): SQLite.SQLiteDatabase {
+async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
-    // Note: Using the synchronous API
-    db = SQLite.openDatabaseSync('knu-timetable.db');
+    db = await SQLite.openDatabaseAsync('knu-timetable.db');
   }
   return db;
 }
@@ -25,10 +24,10 @@ export interface Classroom {
 
 const initialData = require('../assets/data/merged_buildings.json');
 
-export const setupDatabase = () => {
+export const setupDatabase = async () => {
   try {
-    const db = getDb();
-    db.execSync(`
+    const db = await getDb();
+    await db.execAsync(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS classrooms (
         id INTEGER PRIMARY KEY NOT NULL,
@@ -45,16 +44,17 @@ export const setupDatabase = () => {
       );
     `);
 
-    const countResult = db.getAllSync<{ count: number }>('SELECT COUNT(*) as count FROM classrooms;');
-    if (countResult[0].count === 0) {
+    const countResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM classrooms');
+    const count = countResult?.count ?? 0;
+
+    if (count === 0) {
       console.log('Database is empty, populating with initial data...');
-      db.withTransactionSync(() => {
-        const insertStmt = db.prepareSync(
-          'INSERT INTO classrooms (building_name, lat, lng, room_number, mon, tue, wed, thu, fri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        );
+      await db.withTransactionAsync(async () => {
         for (const building of initialData) {
           for (const room of building.rooms) {
-            insertStmt.executeSync([
+            await db.runAsync(
+              `INSERT INTO classrooms (building_name, lat, lng, room_number, mon, tue, wed, thu, fri)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
               building.name,
               building.lat,
               building.lng,
@@ -64,10 +64,11 @@ export const setupDatabase = () => {
               JSON.stringify(room.wen || []),
               JSON.stringify(room.thu || []),
               JSON.stringify(room.fri || [])
-            ]);
+            );
           }
         }
       });
+      console.log('Database population complete.');
     }
   } catch (e) {
     console.error("Error during database setup:", e);
@@ -75,10 +76,10 @@ export const setupDatabase = () => {
   }
 };
 
-export const getAllClassrooms = (): Classroom[] => {
+export const getAllClassrooms = async (): Promise<Classroom[]> => {
   try {
-    const db = getDb();
-    const allRows = db.getAllSync<Classroom>('SELECT * FROM classrooms;');
+    const db = await getDb();
+    const allRows = await db.getAllAsync<Classroom>('SELECT * FROM classrooms;');
     return allRows;
   } catch (e) {
     console.error("Error in getAllClassrooms:", e);

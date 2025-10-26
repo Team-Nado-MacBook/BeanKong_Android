@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Text, Alert } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Text, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -50,6 +50,7 @@ export default function HomeScreen() {
   const [nearestClassroom, setNearestClassroom] = useState<any>(null);
   const [timetableClasses, setTimetableClasses] = useState<any[]>([]);
   const [emptyClassrooms, setEmptyClassrooms] = useState<Classroom[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [selectedStartTime, setSelectedStartTime] = useState<string>('');
   const [selectedDuration, setSelectedDuration] = useState<string>('');
@@ -82,14 +83,17 @@ export default function HomeScreen() {
         }
       };
       
-      const loadClassrooms = () => {
+      const loadClassrooms = async () => {
+        setIsLoading(true);
         try {
-          setupDatabase();
-          const allClassroomsFromDB = getAllClassrooms();
+          await setupDatabase();
+          const allClassroomsFromDB = await getAllClassrooms();
           findEmptyClassrooms(allClassroomsFromDB);
         } catch (e) {
-          console.error("Full error loading classrooms:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
+          console.error("Error loading classrooms:", e);
           Alert.alert("데이터베이스 오류", "강의실 정보를 불러오는 데 실패했습니다.");
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -260,6 +264,17 @@ export default function HomeScreen() {
 
   const outletOptions = ['책상', '벽', '없음'];
 
+  const renderClassroom = ({ item }: { item: Classroom }) => (
+    <TouchableOpacity key={item.id} style={styles.classroomItem} onPress={() => handleClassroomPress(item)} activeOpacity={0.7}>
+      <View style={styles.classroomInfo}>
+        <ThemedText style={styles.classroomName}>{`${item.building_name} ${item.room_number}`}</ThemedText>
+      </View>
+      <TouchableOpacity style={styles.detailButton}>
+        <ThemedText style={styles.detailButtonText}>상세정보 ></ThemedText>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
       <View style={styles.header}>
@@ -327,18 +342,21 @@ export default function HomeScreen() {
             </ThemedText>
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.classroomList}>
-          {emptyClassrooms.map((classroom) => (
-            <TouchableOpacity key={classroom.id} style={styles.classroomItem} onPress={() => handleClassroomPress(classroom)} activeOpacity={0.7}>
-              <View style={styles.classroomInfo}>
-                <ThemedText style={styles.classroomName}>{`${classroom.building_name} ${classroom.room_number}`}</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.detailButton}>
-                <ThemedText style={styles.detailButtonText}>상세정보 ></ThemedText>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.tint} />
+            <ThemedText style={styles.loadingText}>빈 강의실을 찾는 중...</ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            data={emptyClassrooms}
+            renderItem={renderClassroom}
+            keyExtractor={(item) => item.id.toString()}
+            style={styles.classroomList}
+          />
+        )}
+
       </View>
 
       <View style={styles.floatingNavigation}>
@@ -350,7 +368,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={showTimeModal} transparent animationType="slide">
+      <Modal visible={showTimeModal} transparent animationType="slide" onRequestClose={() => setShowTimeModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowTimeModal(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -384,7 +402,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={showDurationModal} transparent animationType="slide">
+      <Modal visible={showDurationModal} transparent animationType="slide" onRequestClose={() => setShowDurationModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowDurationModal(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -418,7 +436,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={showOutletModal} transparent animationType="slide">
+      <Modal visible={showOutletModal} transparent animationType="slide" onRequestClose={() => setShowOutletModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowOutletModal(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -462,6 +480,16 @@ const styles = StyleSheet.create({
   filterButtonText: { fontSize: 14, color: '#666666' },
   selectedFilterText: { color: '#007AFF', fontWeight: '500' },
   classroomList: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666666'
+  },
   classroomItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E5E5' },
   classroomInfo: { flex: 1 },
   classroomName: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 4 },
