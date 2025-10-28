@@ -6,13 +6,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+interface Schedule {
+  day: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface ClassEntry {
   id: string;
   name: string;
   code: string;
-  day: string;
-  startTime: string;
-  endTime: string;
+  schedules: Schedule[];
   color: string;
 }
 
@@ -43,10 +47,22 @@ export default function TimetableScreen() {
     try {
       const savedClasses = await AsyncStorage.getItem('timetableClasses');
       if (savedClasses) {
-        setClasses(JSON.parse(savedClasses));
+        const parsedClasses = JSON.parse(savedClasses);
+        if (Array.isArray(parsedClasses) && parsedClasses.length > 0 && parsedClasses[0].schedules === undefined) {
+          // Old data format detected, clear storage and reset state
+          await AsyncStorage.removeItem('timetableClasses');
+          setClasses([]);
+        } else {
+          setClasses(parsedClasses);
+        }
+      } else {
+        setClasses([]);
       }
     } catch (error) {
       console.error('수업 데이터 불러오기 실패:', error);
+      // If parsing fails, it might be due to old data format, so clear it.
+      await AsyncStorage.removeItem('timetableClasses');
+      setClasses([]);
     }
   };
 
@@ -91,7 +107,7 @@ export default function TimetableScreen() {
   };
 
   const getClassesForDay = (day: string) => {
-    return classes.filter(cls => cls.day === day);
+    return classes.filter(cls => cls.schedules.some(s => s.day === day));
   };
 
   const getClassColor = (day: string) => {
@@ -141,21 +157,25 @@ export default function TimetableScreen() {
             {days.map((day) => (
               <View key={day} style={styles.dayColumn}>
                 {getClassesForDay(day).map((cls) => (
-                  <View
-                    key={cls.id}
-                    style={[
-                      styles.classBlock,
-                      {
-                        backgroundColor: getClassColor(day),
-                        top: getTimePosition(cls.startTime),
-                        height: getClassHeight(cls.startTime, cls.endTime),
-                      }
-                    ]}
-                  >
-                    <ThemedText style={styles.className} numberOfLines={2}>
-                      {cls.name}
-                    </ThemedText>
-                  </View>
+                  <React.Fragment key={cls.id}>
+                    {cls.schedules.filter(s => s.day === day).map((schedule, index) => (
+                      <View
+                        key={`${cls.id}-${index}`}
+                        style={[
+                          styles.classBlock,
+                          {
+                            backgroundColor: getClassColor(day),
+                            top: getTimePosition(schedule.startTime),
+                            height: getClassHeight(schedule.startTime, schedule.endTime),
+                          }
+                        ]}
+                      >
+                        <ThemedText style={styles.className} numberOfLines={2}>
+                          {cls.name}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </React.Fragment>
                 ))}
               </View>
             ))}

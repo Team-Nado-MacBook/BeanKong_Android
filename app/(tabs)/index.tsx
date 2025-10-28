@@ -132,36 +132,40 @@ export default function HomeScreen() {
     const currentDay = dayNames[now.getDay()];
     const currentTime = now.getHours() * 100 + now.getMinutes();
 
-    const sortedClasses = classes
-      .map(c => ({
-        ...c,
-        dayIndex: dayNames.indexOf(c.day),
-        startTimeNum: parseInt(c.startTime.replace(':', ''), 10),
+    const allSchedules = classes.flatMap(c => 
+      c.schedules.map(s => ({
+        name: c.name,
+        day: s.day,
+        startTime: s.startTime,
+        dayIndex: dayNames.indexOf(s.day),
+        startTimeNum: parseInt(s.startTime.replace(':', ''), 10),
       }))
-      .sort((a, b) => {
-        if (a.dayIndex !== b.dayIndex) {
-          return a.dayIndex - b.dayIndex;
-        }
-        return a.startTimeNum - b.startTimeNum;
-      });
+    );
+
+    const sortedSchedules = allSchedules.sort((a, b) => {
+      if (a.dayIndex !== b.dayIndex) {
+        return a.dayIndex - b.dayIndex;
+      }
+      return a.startTimeNum - b.startTimeNum;
+    });
 
     let next = null;
-    for (const c of sortedClasses) {
-      if (c.day === currentDay && c.startTimeNum > currentTime) {
-        next = c;
+    for (const s of sortedSchedules) {
+      if (s.day === currentDay && s.startTimeNum > currentTime) {
+        next = s;
         break;
       }
     }
     if (!next) {
-      for (const c of sortedClasses) {
-        if (c.dayIndex > dayNames.indexOf(currentDay)) {
-          next = c;
+      for (const s of sortedSchedules) {
+        if (s.dayIndex > dayNames.indexOf(currentDay)) {
+          next = s;
           break;
         }
       }
     }
-    if (!next && sortedClasses.length > 0) {
-      next = sortedClasses[0];
+    if (!next && sortedSchedules.length > 0) {
+      next = sortedSchedules[0];
     }
     setNextClass(next);
   };

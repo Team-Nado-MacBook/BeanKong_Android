@@ -70,39 +70,67 @@ export default function SearchScreen() {
       const existingClassesStr = await AsyncStorage.getItem('timetableClasses');
       let existingClasses = existingClassesStr ? JSON.parse(existingClassesStr) : [];
       
+      if (existingClasses.some((c: any) => c.code === course.class_id)) {
+        Alert.alert('오류', '이미 추가된 수업입니다.');
+        return;
+      }
+
       const schedule = JSON.parse(course.schedule);
+      const schedules = [];
 
       for (const entry of schedule) {
         const timeKey = entry.time.join(',');
         const timeInfo = timeBlockMap[timeKey];
         
-        if (!timeInfo) continue; // Skip if time block is not defined
+        if (!timeInfo) continue;
 
-        const newClass = {
-            id: `${course.class_id}-${entry.day}`,
-            name: course.subject,
-            code: course.class_id,
+        schedules.push({
             day: dayMap[entry.day] || entry.day,
             startTime: timeInfo.startTime,
             endTime: timeInfo.endTime,
-            color: '#FFE4B5' // Default color
-        };
-
-        // Remove any class that conflicts with the new class time on the same day
-        const newStartTime = parseInt(newClass.startTime.replace(':', ''), 10);
-        const newEndTime = parseInt(newClass.endTime.replace(':', ''), 10);
-
-        existingClasses = existingClasses.filter((c: any) => {
-            if (c.day !== newClass.day) return true; // Keep classes on other days
-            const existingStartTime = parseInt(c.startTime.replace(':', ''), 10);
-            const existingEndTime = parseInt(c.endTime.replace(':', ''), 10);
-            // Return false (remove) if there is a time overlap
-            return !(newStartTime < existingEndTime && newEndTime > existingStartTime);
         });
-
-        // Add the new class
-        existingClasses.push(newClass);
       }
+
+      if (schedules.length === 0) {
+        Alert.alert('오류', '유효한 시간 정보가 없는 수업입니다.');
+        return;
+      }
+
+      const newClass = {
+          id: course.class_id,
+          name: course.subject,
+          code: course.class_id,
+          schedules: schedules,
+          color: '#FFE4B5'
+      };
+
+      // Conflict check
+      const conflictingClasses = existingClasses.filter((c: any) => {
+        for (const newSchedule of newClass.schedules) {
+          for (const existingSchedule of c.schedules) {
+            if (newSchedule.day === existingSchedule.day) {
+              const newStartTime = parseInt(newSchedule.startTime.replace(':', ''), 10);
+              const newEndTime = parseInt(newSchedule.endTime.replace(':', ''), 10);
+              const existingStartTime = parseInt(existingSchedule.startTime.replace(':', ''), 10);
+              const existingEndTime = parseInt(existingSchedule.endTime.replace(':', ''), 10);
+
+              if (newStartTime < existingEndTime && newEndTime > existingStartTime) {
+                return true; // Conflict found
+              }
+            }
+          }
+        }
+        return false; // No conflict
+      });
+
+      if (conflictingClasses.length > 0) {
+        const conflictingClassNames = conflictingClasses.map((c: any) => c.name).join(', ');
+        Alert.alert('시간표 충돌', `다음 수업과 시간이 겹칩니다: ${conflictingClassNames}`);
+        return;
+      }
+
+      // Add the new class
+      existingClasses.push(newClass);
 
       await AsyncStorage.setItem('timetableClasses', JSON.stringify(existingClasses));
       Alert.alert('추가 완료', `${course.subject} 수업이 시간표에 추가되었습니다.`);
