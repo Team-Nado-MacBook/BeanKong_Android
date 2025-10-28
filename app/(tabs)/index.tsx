@@ -6,8 +6,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Location from 'expo-location';
 import { setupDatabase, getAllClassrooms, Classroom } from '../../database';
+import { useLocation } from '@/context/location-context';
 
 const timePeriods = [
     { start: "08:00", end: "08:50", periods: ["0"] },
@@ -37,7 +37,7 @@ function getCurrentPeriods() {
             return slot.periods;
         }
     }
-    return []; // In-between classes
+    return [];
 }
 
 function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
@@ -46,7 +46,6 @@ function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
   }
 
   if (!duration) {
-    // If no duration, just find the period for the start time
     const [startHour, startMinute] = startTime.split(':').map(Number);
     const startTotalMinutes = startHour * 60 + startMinute;
 
@@ -101,8 +100,8 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 
 const deg2rad = (deg: number) => deg * (Math.PI / 180);
 
-
 export default function HomeScreen() {
+  const { location: userLocation, locationPermission, isLoading: isLocationLoading, refreshLocation } = useLocation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -110,7 +109,7 @@ export default function HomeScreen() {
   const [nextClass, setNextClass] = useState<any>(null);
   const [nearestClassroom, setNearestClassroom] = useState<any>(null);
   const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
-  const [emptyClassrooms, setEmptyClassrooms] = useState<Classroom[]>([]);
+  const [emptyClassrooms, setEmptyClassrooms] = useState<(Classroom & { distance?: number })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [selectedStartTime, setSelectedStartTime] = useState<string>('');
@@ -126,7 +125,7 @@ export default function HomeScreen() {
   const [selectedDurationHour, setSelectedDurationHour] = useState<number>(1);
   const [selectedDurationMinute, setSelectedDurationMinute] = useState<number>(0);
 
-  const findEmptyClassrooms = useCallback((allClassrooms: Classroom[]) => {
+  const getFilteredEmptyClassrooms = (allClassrooms: Classroom[], selectedStartTime: string, selectedDuration: string): Classroom[] => {
     const dayMapping = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
 
@@ -138,64 +137,62 @@ export default function HomeScreen() {
     }
 
     if (periodsToFilter.length === 0 || !currentDayKey || !['mon', 'tue', 'wed', 'thu', 'fri'].includes(currentDayKey)) {
-        setEmptyClassrooms(allClassrooms);
-        return;
+        return allClassrooms;
     }
 
-    const empty = allClassrooms.filter(classroom => {
+    return allClassrooms.filter(classroom => {
         try {
             const daySchedule = JSON.parse(classroom[currentDayKey] as string);
             if (!Array.isArray(daySchedule)) return true;
             const isOccupied = daySchedule.some((classPeriod: string) => periodsToFilter.includes(classPeriod));
             return !isOccupied;
         } catch {
-            return true; // If JSON is invalid, assume it's empty
+            return true;
         }
     });
+  }
 
-    setEmptyClassrooms(empty);
-  }, [selectedStartTime, selectedDuration]);
+  const findEmptyClassrooms = useCallback(() => {
+    const empty = getFilteredEmptyClassrooms(allClassrooms, selectedStartTime, selectedDuration);
+
+    if (locationPermission && userLocation) {
+      const classroomsWithDistance = empty.map(classroom => {
+        const distance = getDistance(userLocation.coords.latitude, userLocation.coords.longitude, classroom.lat, classroom.lng);
+        return { ...classroom, distance };
+      });
+
+      classroomsWithDistance.sort((a, b) => a.distance - b.distance);
+      setEmptyClassrooms(classroomsWithDistance);
+    } else {
+      empty.sort((a, b) => a.building_name.localeCompare(b.building_name));
+      setEmptyClassrooms(empty);
+    }
+  }, [allClassrooms, selectedStartTime, selectedDuration, locationPermission, userLocation]);
 
   useFocusEffect(
     useCallback(() => {
-      const checkTimetable = async () => {
+      const loadData = async () => {
+        setIsLoading(true);
         const savedClasses = await AsyncStorage.getItem('timetableClasses');
         if (savedClasses) {
           const classes = JSON.parse(savedClasses);
-          if (classes.length > 0) {
-            setHasTimetable(true);
-            findNextClass(classes);
-          } else {
-            setHasTimetable(false);
-          }
-        } else {
-          setHasTimetable(false);
+          setHasTimetable(classes.length > 0);
+          if (classes.length > 0) findNextClass(classes);
         }
+        await setupDatabase();
+        const allClassroomsFromDB = await getAllClassrooms();
+        setAllClassrooms(allClassroomsFromDB);
+        setIsLoading(false);
       };
-      
-      const loadClassrooms = async () => {
-        setIsLoading(true);
-        try {
-          await setupDatabase();
-          const allClassroomsFromDB = await getAllClassrooms();
-          setAllClassrooms(allClassroomsFromDB);
-          findEmptyClassrooms(allClassroomsFromDB);
-        } catch (e) {
-          console.error("Error loading classrooms:", e);
-          Alert.alert("데이터베이스 오류", "강의실 정보를 불러오는 데 실패했습니다.");
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      checkTimetable();
-      loadClassrooms();
-    }, [findEmptyClassrooms])
+      loadData();
+    }, [])
   );
 
   useEffect(() => {
-    findEmptyClassrooms(allClassrooms);
-  }, [selectedStartTime, selectedDuration, allClassrooms, findEmptyClassrooms]);
+    if (allClassrooms.length > 0) {
+      findEmptyClassrooms();
+    }
+  }, [allClassrooms, findEmptyClassrooms]);
 
   const findNextClass = (classes: any[]) => {
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -241,35 +238,17 @@ export default function HomeScreen() {
     setNextClass(next);
   };
 
-  const findNearestEmptyClassroom = useCallback(async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setNearestClassroom({ name: '위치 권한 필요', distance: '' });
+  const findNearestEmptyClassroom = useCallback(() => {
+    if (!locationPermission || emptyClassrooms.length === 0) {
+      setNearestClassroom({ name: locationPermission ? '빈 강의실 없음' : '위치 권한 필요', distance: '' });
       return;
     }
-
-    let location = await Location.getCurrentPositionAsync({});
-    const userLat = location.coords.latitude;
-    const userLon = location.coords.longitude;
-
-    if (emptyClassrooms.length === 0) {
-      setNearestClassroom({ name: '빈 강의실 없음', distance: '' });
-      return;
-    }
-
-    const classroomsWithDistance = emptyClassrooms.map(classroom => {
-      const distance = getDistance(userLat, userLon, classroom.lat, classroom.lng);
-      return { ...classroom, distance };
-    });
-
-    classroomsWithDistance.sort((a, b) => a.distance - b.distance);
-
-    const nearest = classroomsWithDistance[0];
+    const nearest = emptyClassrooms[0] as (Classroom & { distance: number });
     setNearestClassroom({
       name: `${nearest.building_name} ${nearest.room_number}`,
       distance: `${Math.round(nearest.distance * 1000)}m`,
     });
-  }, [emptyClassrooms]);
+  }, [emptyClassrooms, locationPermission]);
 
   useEffect(() => {
     if (emptyClassrooms.length > 0) {
@@ -326,6 +305,14 @@ export default function HomeScreen() {
   const handleMapPress = () => router.push('/map');
   const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.building_name, classroom.room_number);
 
+  const handleRefreshLocation = async () => {
+    if (!locationPermission) {
+      Alert.alert("위치 권한 필요", "위치 권한을 허용해야 현재 위치를 기준으로 정렬할 수 있습니다.");
+      return;
+    }
+    await refreshLocation();
+  };
+
   const outletOptions = ['책상', '벽', '없음'];
 
   const renderClassroom = ({ item }: { item: Classroom }) => (
@@ -338,6 +325,8 @@ export default function HomeScreen() {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  const finalIsLoading = isLoading || isLocationLoading;
 
   return (
     <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
@@ -384,7 +373,13 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
+        <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
+          <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshLocation}>
+            <IconSymbol name="location.fill" size={16} color="#666666" />
+            <ThemedText style={styles.refreshButtonText}>현위치</ThemedText>
+          </TouchableOpacity>
+        </View>
         <View style={styles.filterContainer}>
           <View style={styles.sortIcon}>
             <IconSymbol name="arrow.up.arrow.down" size={16} color="#666666" />
@@ -407,7 +402,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
         
-        {isLoading ? (
+        {finalIsLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.tint} />
             <ThemedText style={styles.loadingText}>빈 강의실을 찾는 중...</ThemedText>
@@ -537,7 +532,26 @@ const styles = StyleSheet.create({
   boxText: { fontSize: 14, color: '#333333' },
   boxSubText: { fontSize: 12, color: '#999999', marginTop: 5 },
   section: { flex: 1, paddingHorizontal: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#000000', marginBottom: 16 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#000000' },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+  },
+  refreshButtonText: {
+    fontSize: 14,
+    color: '#666666',
+  },
   filterContainer: { flexDirection: 'row', marginBottom: 20, gap: 8 },
   sortIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2 },
   filterButton: { flex: 1, height: 40, backgroundColor: '#F5F5F5', borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, flexDirection: 'row', gap: 4 },

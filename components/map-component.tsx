@@ -1,90 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import * as Location from 'expo-location';
+import { useLocation } from '@/context/location-context';
 
-interface MapComponentProps {
-  height: number;
-}
-
-export default function MapComponent({ height }: MapComponentProps) {
+export default function MapComponent() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    getCurrentLocation();
-    startLocationTracking();
-  }, []);
-
-  const getCurrentLocation = async () => {
-    try {
-      setIsLoading(true);
-      
-      // 위치 권한 요청
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationError('위치 권한이 거부되었습니다.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 현재 위치 가져오기
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      
-      setLocation(currentLocation);
-      setLocationError(null);
-    } catch (error) {
-      console.error('위치 가져오기 실패:', error);
-      setLocationError('위치를 가져올 수 없습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const startLocationTracking = async () => {
-    try {
-      // 백그라운드 위치 권한 요청
-      const { status } = await Location.requestBackgroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('백그라운드 위치 권한이 거부되었습니다.');
-        return;
-      }
-
-      // 위치 추적 시작
-      await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 10000, // 10초마다 업데이트
-          distanceInterval: 100, // 100m 이동시 업데이트
-        },
-        (newLocation) => {
-          setLocation(newLocation);
-          setLocationError(null);
-        }
-      );
-    } catch (error) {
-      console.error('위치 추적 시작 실패:', error);
-    }
-  };
-
-  const getLocationInfo = () => {
-    if (isLoading) return '위치 확인 중...';
-    if (locationError) return locationError;
-    if (!location) return '위치 정보 없음';
-    
-    const { latitude, longitude } = location.coords;
-    return `위도: ${latitude.toFixed(4)}, 경도: ${longitude.toFixed(4)}`;
-  };
+  const { location, isLoading: isLocationLoading, locationPermission } = useLocation();
 
   const getOpenStreetMapUrl = () => {
     if (!location) return '';
@@ -95,7 +21,7 @@ export default function MapComponent({ height }: MapComponentProps) {
 
   return (
     <View style={styles.container}>
-      {location ? (
+      {locationPermission && location ? (
         <View style={styles.mapContainer}>
           <WebView
             style={styles.map}
@@ -118,15 +44,12 @@ export default function MapComponent({ height }: MapComponentProps) {
       ) : (
         <View style={[styles.placeholder, { backgroundColor: colors.background }]}>
           <IconSymbol 
-            name={isLoading ? "location.circle" : "location.fill"} 
+            name={isLocationLoading ? "location.circle" : "location.fill"} 
             size={48} 
-            color={isLoading ? colors.tint : '#007AFF'} 
+            color={isLocationLoading ? colors.tint : '#007AFF'} 
           />
           <ThemedText style={styles.mapText}>
-            {isLoading ? '위치 확인 중...' : '위치 정보 없음'}
-          </ThemedText>
-          <ThemedText style={styles.subText}>
-            {getLocationInfo()}
+            {isLocationLoading ? '위치 확인 중...' : '위치 권한이 필요합니다.'}
           </ThemedText>
         </View>
       )}
@@ -168,10 +91,5 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     fontWeight: '600',
-  },
-  subText: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#999',
   },
 });
