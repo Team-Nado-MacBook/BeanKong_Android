@@ -41,7 +41,23 @@ function getCurrentPeriods() {
 }
 
 function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
-  if (!startTime || !duration) {
+  if (!startTime) {
+    return [];
+  }
+
+  if (!duration) {
+    // If no duration, just find the period for the start time
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const startTotalMinutes = startHour * 60 + startMinute;
+
+    for (const slot of timePeriods) {
+        const slotStartMinutes = parseInt(slot.start.split(':')[0], 10) * 60 + parseInt(slot.start.split(':')[1], 10);
+        const slotEndMinutes = parseInt(slot.end.split(':')[0], 10) * 60 + parseInt(slot.end.split(':')[1], 10);
+
+        if (startTotalMinutes >= slotStartMinutes && startTotalMinutes < slotEndMinutes) {
+            return slot.periods;
+        }
+    }
     return [];
   }
 
@@ -115,7 +131,7 @@ export default function HomeScreen() {
     const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
 
     let periodsToFilter: string[] = [];
-    if (selectedStartTime && selectedDuration) {
+    if (selectedStartTime) {
       periodsToFilter = getPeriodsForTimeRange(selectedStartTime, selectedDuration);
     } else {
       periodsToFilter = getCurrentPeriods();
