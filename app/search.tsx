@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -56,7 +56,7 @@ export default function SearchScreen() {
       try {
         const results = await searchCourses(debouncedSearchQuery);
         setSearchResults(results);
-      } catch (error) {
+      } catch {
         Alert.alert('오류', '강의 검색에 실패했습니다.');
       } finally {
         setIsLoading(false);
@@ -136,8 +136,7 @@ export default function SearchScreen() {
       Alert.alert('추가 완료', `${course.subject} 수업이 시간표에 추가되었습니다.`);
       router.back();
 
-    } catch (error) {
-      console.error("Failed to add class:", error);
+    } catch {
       Alert.alert('오류', '수업 추가에 실패했습니다.');
     }
   };

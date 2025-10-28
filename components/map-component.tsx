@@ -7,9 +7,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import * as Location from 'expo-location';
 
-interface MapComponentProps {}
+interface MapComponentProps {
+  height: number;
+}
 
-export default function MapComponent({}: MapComponentProps) {
+export default function MapComponent({ height }: MapComponentProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   

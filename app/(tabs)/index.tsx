@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Text, Alert, FlatList, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
@@ -41,6 +40,52 @@ function getCurrentPeriods() {
     return []; // In-between classes
 }
 
+function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
+  if (!startTime || !duration) {
+    return [];
+  }
+
+  const [startHour, startMinute] = startTime.split(':').map(Number);
+  const startTotalMinutes = startHour * 60 + startMinute;
+
+  let durationHours = 0;
+  let durationMinutes = 0;
+  if (duration.includes('h')) {
+    durationHours = parseInt(duration.split('h')[0], 10);
+  }
+  if (duration.includes('m')) {
+    const minPart = duration.includes('h') ? duration.split('h')[1] : duration;
+    durationMinutes = parseInt(minPart.replace('m', ''), 10);
+  }
+
+  const durationTotalMinutes = durationHours * 60 + durationMinutes;
+  const endTotalMinutes = startTotalMinutes + durationTotalMinutes;
+
+  const periods: string[] = [];
+  for (const slot of timePeriods) {
+    const slotStartMinutes = parseInt(slot.start.split(':')[0], 10) * 60 + parseInt(slot.start.split(':')[1], 10);
+    const slotEndMinutes = parseInt(slot.end.split(':')[0], 10) * 60 + parseInt(slot.end.split(':')[1], 10);
+
+    if (startTotalMinutes < slotEndMinutes && endTotalMinutes > slotStartMinutes) {
+      periods.push(...slot.periods);
+    }
+  }
+
+  return periods;
+}
+
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const deg2rad = (deg: number) => deg * (Math.PI / 180);
+
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -48,7 +93,7 @@ export default function HomeScreen() {
   const [hasTimetable, setHasTimetable] = useState(false);
   const [nextClass, setNextClass] = useState<any>(null);
   const [nearestClassroom, setNearestClassroom] = useState<any>(null);
-  const [timetableClasses, setTimetableClasses] = useState<any[]>([]);
+  const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
   const [emptyClassrooms, setEmptyClassrooms] = useState<Classroom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,13 +110,42 @@ export default function HomeScreen() {
   const [selectedDurationHour, setSelectedDurationHour] = useState<number>(1);
   const [selectedDurationMinute, setSelectedDurationMinute] = useState<number>(0);
 
+  const findEmptyClassrooms = useCallback((allClassrooms: Classroom[]) => {
+    const dayMapping = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
+
+    let periodsToFilter: string[] = [];
+    if (selectedStartTime && selectedDuration) {
+      periodsToFilter = getPeriodsForTimeRange(selectedStartTime, selectedDuration);
+    } else {
+      periodsToFilter = getCurrentPeriods();
+    }
+
+    if (periodsToFilter.length === 0 || !currentDayKey || !['mon', 'tue', 'wed', 'thu', 'fri'].includes(currentDayKey)) {
+        setEmptyClassrooms(allClassrooms);
+        return;
+    }
+
+    const empty = allClassrooms.filter(classroom => {
+        try {
+            const daySchedule = JSON.parse(classroom[currentDayKey] as string);
+            if (!Array.isArray(daySchedule)) return true;
+            const isOccupied = daySchedule.some((classPeriod: string) => periodsToFilter.includes(classPeriod));
+            return !isOccupied;
+        } catch {
+            return true; // If JSON is invalid, assume it's empty
+        }
+    });
+
+    setEmptyClassrooms(empty);
+  }, [selectedStartTime, selectedDuration]);
+
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       const checkTimetable = async () => {
         const savedClasses = await AsyncStorage.getItem('timetableClasses');
         if (savedClasses) {
           const classes = JSON.parse(savedClasses);
-          setTimetableClasses(classes);
           if (classes.length > 0) {
             setHasTimetable(true);
             findNextClass(classes);
@@ -88,6 +162,7 @@ export default function HomeScreen() {
         try {
           await setupDatabase();
           const allClassroomsFromDB = await getAllClassrooms();
+          setAllClassrooms(allClassroomsFromDB);
           findEmptyClassrooms(allClassroomsFromDB);
         } catch (e) {
           console.error("Error loading classrooms:", e);
@@ -99,32 +174,12 @@ export default function HomeScreen() {
 
       checkTimetable();
       loadClassrooms();
-    }, [])
+    }, [findEmptyClassrooms])
   );
 
-  const findEmptyClassrooms = (allClassrooms: Classroom[]) => {
-    const currentPeriods = getCurrentPeriods();
-    const dayMapping = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
-
-    if (currentPeriods.length === 0 || !currentDayKey || !['mon', 'tue', 'wed', 'thu', 'fri'].includes(currentDayKey)) {
-        setEmptyClassrooms(allClassrooms);
-        return;
-    }
-
-    const empty = allClassrooms.filter(classroom => {
-        try {
-            const daySchedule = JSON.parse(classroom[currentDayKey] as string);
-            if (!Array.isArray(daySchedule)) return true;
-            const isOccupied = daySchedule.some((classPeriod: string) => currentPeriods.includes(classPeriod));
-            return !isOccupied;
-        } catch (e) {
-            return true; // If JSON is invalid, assume it's empty
-        }
-    });
-
-    setEmptyClassrooms(empty);
-  };
+  useEffect(() => {
+    findEmptyClassrooms(allClassrooms);
+  }, [selectedStartTime, selectedDuration, allClassrooms, findEmptyClassrooms]);
 
   const findNextClass = (classes: any[]) => {
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -170,7 +225,7 @@ export default function HomeScreen() {
     setNextClass(next);
   };
 
-  const findNearestEmptyClassroom = async () => {
+  const findNearestEmptyClassroom = useCallback(async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       setNearestClassroom({ name: '위치 권한 필요', distance: '' });
@@ -198,24 +253,13 @@ export default function HomeScreen() {
       name: `${nearest.building_name} ${nearest.room_number}`,
       distance: `${Math.round(nearest.distance * 1000)}m`,
     });
-  };
+  }, [emptyClassrooms]);
 
   useEffect(() => {
     if (emptyClassrooms.length > 0) {
       findNearestEmptyClassroom();
     }
-  }, [emptyClassrooms]);
-
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = deg2rad(lat2 - lat1);
-    const dLon = deg2rad(lon2 - lon1);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const deg2rad = (deg: number) => deg * (Math.PI / 180);
+  }, [emptyClassrooms, findNearestEmptyClassroom]);
 
   const handleTimetablePress = () => router.push('/timetable');
   const handleStartTimePress = () => { setTimeModalType('start'); setShowTimeModal(true); };
@@ -274,7 +318,7 @@ export default function HomeScreen() {
         <ThemedText style={styles.classroomName}>{`${item.building_name} ${item.room_number}`}</ThemedText>
       </View>
       <TouchableOpacity style={styles.detailButton}>
-        <ThemedText style={styles.detailButtonText}>상세정보 ></ThemedText>
+        <ThemedText style={styles.detailButtonText}>상세정보 &gt;</ThemedText>
       </TouchableOpacity>
     </TouchableOpacity>
   );
