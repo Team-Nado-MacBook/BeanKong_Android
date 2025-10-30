@@ -41,14 +41,22 @@ function getCurrentPeriods() {
 }
 
 function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
+  let startTotalMinutes: number;
+
   if (!startTime) {
-    return [];
+    if (!duration) {
+      return [];
+    }
+    // Only duration is provided, use current time as start time
+    const now = new Date();
+    startTotalMinutes = now.getHours() * 60 + now.getMinutes();
+  } else {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    startTotalMinutes = startHour * 60 + startMinute;
   }
 
   if (!duration) {
-    const [startHour, startMinute] = startTime.split(':').map(Number);
-    const startTotalMinutes = startHour * 60 + startMinute;
-
+    // Only startTime is provided
     for (const slot of timePeriods) {
         const slotStartMinutes = parseInt(slot.start.split(':')[0], 10) * 60 + parseInt(slot.start.split(':')[1], 10);
         const slotEndMinutes = parseInt(slot.end.split(':')[0], 10) * 60 + parseInt(slot.end.split(':')[1], 10);
@@ -60,9 +68,7 @@ function getPeriodsForTimeRange(startTime: string, duration: string): string[] {
     return [];
   }
 
-  const [startHour, startMinute] = startTime.split(':').map(Number);
-  const startTotalMinutes = startHour * 60 + startMinute;
-
+  // Both startTime (or current time) and duration are provided
   let durationHours = 0;
   let durationMinutes = 0;
   if (duration.includes('h')) {
@@ -130,7 +136,7 @@ export default function HomeScreen() {
     const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<Classroom, 'id' | 'building_name' | 'lat' | 'lng' | 'room_number'>;
 
     let periodsToFilter: string[] = [];
-    if (selectedStartTime) {
+    if (selectedStartTime || selectedDuration) {
       periodsToFilter = getPeriodsForTimeRange(selectedStartTime, selectedDuration);
     } else {
       periodsToFilter = getCurrentPeriods();
