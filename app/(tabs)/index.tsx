@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, Alert, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -107,7 +107,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 const deg2rad = (deg: number) => deg * (Math.PI / 180);
 
 export default function HomeScreen() {
-  const { location: userLocation, locationPermission, isLoading: isLocationLoading, refreshLocation } = useLocation();
+  const { location: userLocation, locationPermission, isLoading: isLocationLoading } = useLocation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -308,14 +308,6 @@ export default function HomeScreen() {
   const handleMapPress = () => router.push('/map');
   const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.building_name, classroom.room_number);
 
-  const handleRefreshLocation = async () => {
-    if (!locationPermission) {
-      Alert.alert("위치 권한 필요", "위치 권한을 허용해야 현재 위치를 기준으로 정렬할 수 있습니다.");
-      return;
-    }
-    await refreshLocation();
-  };
-
   const outletOptions = ['책상', '벽', '없음'];
 
   const renderClassroom = ({ item }: { item: Classroom }) => (
@@ -378,10 +370,7 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
-          <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshLocation}>
-            <IconSymbol name="location.fill" size={16} color="#666666" />
-            <ThemedText style={styles.refreshButtonText}>현위치</ThemedText>
-          </TouchableOpacity>
+
         </View>
         <View style={styles.filterContainer}>
           <View style={styles.sortIcon}>
