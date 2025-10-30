@@ -124,7 +124,7 @@ export default function HomeScreen() {
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [showDurationModal, setShowDurationModal] = useState(false);
   const [showOutletModal, setShowOutletModal] = useState(false);
-  const [timeModalType, setTimeModalType] = useState<'start' | 'duration'>('start');
+
   
   const [selectedHour, setSelectedHour] = useState<number>(9);
   const [selectedMinute, setSelectedMinute] = useState<number>(0);
@@ -263,19 +263,15 @@ export default function HomeScreen() {
   }, [emptyClassrooms, findNearestEmptyClassroom]);
 
   const handleTimetablePress = () => router.push('/timetable');
-  const handleStartTimePress = () => { setTimeModalType('start'); setShowTimeModal(true); };
-  const handleDurationPress = () => { setTimeModalType('duration'); setShowDurationModal(true); };
+  const handleStartTimePress = () => { setShowTimeModal(true); };
+  const handleDurationPress = () => { setShowDurationModal(true); };
   const handleOutletPress = () => setShowOutletModal(true);
 
   const handleTimeSelect = () => {
     const timeString = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
-    if (timeModalType === 'start') {
-      setSelectedStartTime(timeString);
-    } else {
-      setSelectedDuration(timeString);
-    }
+    setSelectedStartTime(timeString);
     setShowTimeModal(false);
-    setShowDurationModal(false);
+    setShowDurationModal(true);
   };
 
   const handleDurationSelect = () => {
@@ -289,6 +285,7 @@ export default function HomeScreen() {
     }
     setSelectedDuration(durationString);
     setShowDurationModal(false);
+    setShowOutletModal(true);
   };
 
   const handleOutletSelect = (outlet: string) => {
