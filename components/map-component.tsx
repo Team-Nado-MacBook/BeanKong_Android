@@ -1,46 +1,53 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useLocation } from '@/context/location-context';
+import buildings from '@/assets/data/merged_buildings.json';
+
+import EmptyClassroomModal from './EmptyClassroomModal';
 
 export default function MapComponent() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { location, isLoading: isLocationLoading, locationPermission } = useLocation();
+  const [selectedBuilding, setSelectedBuilding] = useState<any>(null);
 
-  const getOpenStreetMapUrl = () => {
-    if (!location) return '';
-    
-    const { latitude, longitude } = location.coords;
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.01},${latitude-0.01},${longitude+0.01},${latitude+0.01}&layer=mapnik&marker=${latitude},${longitude}`;
+  const handleMarkerPress = (building: any) => {
+    setSelectedBuilding(building);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedBuilding(null);
   };
 
   return (
     <View style={styles.container}>
       {locationPermission && location ? (
-        <View style={styles.mapContainer}>
-          <WebView
-            style={styles.map}
-            source={{ uri: getOpenStreetMapUrl() }}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={styles.loadingContainer}>
-                <IconSymbol name="location.circle" size={32} color={colors.tint} />
-                <ThemedText style={styles.loadingText}>지도 로딩 중...</ThemedText>
-              </View>
-            )}
-            onError={(syntheticEvent: any) => {
-              const { nativeEvent } = syntheticEvent;
-              console.warn('WebView error: ', nativeEvent);
-            }}
-          />
-        </View>
+        <MapView
+          style={styles.map}
+          provider={PROVIDER_GOOGLE}
+          initialRegion={{
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }}
+          showsUserLocation={true}
+        >
+          {buildings.map((building) => (
+            <Marker
+              key={building.name}
+              coordinate={{ latitude: building.lat, longitude: building.lng }}
+              title={building.name}
+              description="Click to see available rooms"
+              onPress={() => handleMarkerPress(building)}
+            />
+          ))}
+        </MapView>
       ) : (
         <View style={[styles.placeholder, { backgroundColor: colors.background }]}>
           <IconSymbol 
@@ -53,6 +60,11 @@ export default function MapComponent() {
           </ThemedText>
         </View>
       )}
+      <EmptyClassroomModal
+        building={selectedBuilding}
+        visible={selectedBuilding !== null}
+        onClose={handleCloseModal}
+      />
     </View>
   );
 }
