@@ -24,6 +24,7 @@ export default function MapComponent() {
     setSelectedBuilding(null);
   };
 
+  console.log(buildings);
   return (
     <View style={styles.container}>
       {locationPermission && location ? (
@@ -38,9 +39,9 @@ export default function MapComponent() {
           }}
           showsUserLocation={true}
         >
-          {buildings.map((building) => (
+          {buildings.map((building, index) => (
             <Marker
-              key={building.name}
+              key={`${building.name}-${index}`}
               coordinate={{ latitude: building.lat, longitude: building.lng }}
               title={building.name}
               description="Click to see available rooms"

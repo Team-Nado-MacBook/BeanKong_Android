@@ -101,7 +101,7 @@ export default function EmptyClassroomModal({ building, visible, onClose }: { bu
           <ThemedText style={styles.title}>현재 이용가능한 강의실</ThemedText>
           <ScrollView style={styles.scrollView}>
             {availableRooms.length > 0 ? (
-              availableRooms.map(room => <ThemedText key={room} style={styles.roomText}>{room}</ThemedText>)
+              availableRooms.map((room, index) => <ThemedText key={`${room}-${index}`} style={styles.roomText}>{room}</ThemedText>)
             ) : (
               <ThemedText>No available classrooms at the moment.</ThemedText>
             )}
