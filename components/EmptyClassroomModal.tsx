@@ -33,16 +33,6 @@ const timeSlots = {
   '13B': { start: '21:30', end: '21:55' },
 };
 
-const dayMapping: { [key: number]: string } = {
-  1: 'mon',
-  2: 'tue',
-  3: 'wed',
-  4: 'thu',
-  5: 'fri',
-  6: 'sat',
-  0: 'sun',
-};
-
 const getCurrentTimeSlot = () => {
   const now = new Date();
   const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -63,7 +53,8 @@ export default function EmptyClassroomModal({ building, visible, onClose }: { bu
 
   useEffect(() => {
     if (building) {
-      const day = dayMapping[new Date().getDay()];
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const day = dayNames[new Date().getDay()];
       const timeSlot = getCurrentTimeSlot();
 
       if (timeSlot) {
@@ -71,8 +62,9 @@ export default function EmptyClassroomModal({ building, visible, onClose }: { bu
         if (buildingData) {
           const allRoomsInBuilding = buildingData.rooms.map(r => r.room);
           const occupiedRooms = classSchedule
-            .filter(c => c.building === building.name && c.schedule.some(s => s.day === day && s.time.includes(timeSlot)))
+            .filter(c => c.building.includes(building.name) && c.schedule.some(s => s.day === day && s.time.includes(timeSlot)))
             .map(c => c.room);
+          console.log('Occupied Rooms:', occupiedRooms);
           
           const uniqueOccupiedRooms = [...new Set(occupiedRooms)];
           const emptyRooms = allRoomsInBuilding.filter(room => !uniqueOccupiedRooms.includes(room));

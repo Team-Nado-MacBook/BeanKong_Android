@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -325,90 +325,89 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-      <View style={styles.header}>
-        <ThemedText style={styles.title}>BeanKong</ThemedText>
-        <TouchableOpacity style={styles.menuButton} onPress={handleTimetablePress}>
-          <IconSymbol name="ellipsis" size={24} color="#666666" />
-        </TouchableOpacity>
-      </View>
-
-      {hasTimetable ? (
-        <View style={styles.twoBoxesContainer}>
-          <View style={styles.box}>
-            <ThemedText style={styles.boxTitle}>다음 강의</ThemedText>
-            {nextClass ? (
-              <>
-                <ThemedText style={styles.boxText}>{nextClass.name}</ThemedText>
-                <ThemedText style={styles.boxSubText}>{nextClass.day} {nextClass.startTime}</ThemedText>
-              </>
-            ) : (
-              <ThemedText style={styles.boxText}>오늘 남은 강의가 없습니다.</ThemedText>
-            )}
-          </View>
-          <View style={styles.box}>
-            <ThemedText style={styles.boxTitle}>가까운 빈 강의실</ThemedText>
-            {nearestClassroom ? (
-              <>
-                <ThemedText style={styles.boxText}>{nearestClassroom.name}</ThemedText>
-                <ThemedText style={styles.boxSubText}>{nearestClassroom.distance}</ThemedText>
-              </>
-            ) : (
-              <ThemedText style={styles.boxText}>찾는 중...</ThemedText>
-            )}
-          </View>
-        </View>
-      ) : (
-        <TouchableOpacity style={styles.timetableCard} onPress={handleTimetablePress}>
-          <View style={styles.timetableIconContainer}>
-            <IconSymbol name="calendar" size={32} color="#666666" />
-            <IconSymbol name="exclamationmark" size={16} color="#FF3B30" style={styles.exclamationIcon} />
-          </View>
-          <ThemedText style={styles.timetableText}>시간표를 입력하세요</ThemedText>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
-
-        </View>
-        <View style={styles.filterContainer}>
-          <View style={styles.sortIcon}>
-            <IconSymbol name="arrow.up.arrow.down" size={16} color="#666666" />
-          </View>
-          <TouchableOpacity style={styles.filterButton} onPress={handleStartTimePress}>
-            <IconSymbol name="clock" size={16} color="#666666" />
-            <ThemedText style={[styles.filterButtonText, selectedStartTime && styles.selectedFilterText]}>
-              {selectedStartTime || '시작 시간'}
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton} onPress={handleDurationPress}>
-            <ThemedText style={[styles.filterButtonText, selectedDuration && styles.selectedFilterText]}>
-              {selectedDuration || '사용 시간'}
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton} onPress={handleOutletPress}>
-            <ThemedText style={[styles.filterButtonText, selectedOutlets.length > 0 && styles.selectedFilterText]}>
-              {selectedOutlets.length > 0 ? selectedOutlets.join(', ') : '콘센트'}
-            </ThemedText>
+      <ScrollView>
+        <View style={styles.header}>
+          <ThemedText style={styles.title}>BeanKong</ThemedText>
+          <TouchableOpacity style={styles.menuButton} onPress={handleTimetablePress}>
+            <IconSymbol name="ellipsis" size={24} color="#666666" />
           </TouchableOpacity>
         </View>
-        
-        {finalIsLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.tint} />
-            <ThemedText style={styles.loadingText}>빈 강의실을 찾는 중...</ThemedText>
+
+        {hasTimetable ? (
+          <View style={styles.twoBoxesContainer}>
+            <View style={styles.box}>
+              <ThemedText style={styles.boxTitle}>다음 강의</ThemedText>
+              {nextClass ? (
+                <>
+                  <ThemedText style={styles.boxText}>{nextClass.name}</ThemedText>
+                  <ThemedText style={styles.boxSubText}>{nextClass.day} {nextClass.startTime}</ThemedText>
+                </>
+              ) : (
+                <ThemedText style={styles.boxText}>오늘 남은 강의가 없습니다.</ThemedText>
+              )}
+            </View>
+            <View style={styles.box}>
+              <ThemedText style={styles.boxTitle}>가까운 빈 강의실</ThemedText>
+              {nearestClassroom ? (
+                <>
+                  <ThemedText style={styles.boxText}>{nearestClassroom.name}</ThemedText>
+                  <ThemedText style={styles.boxSubText}>{nearestClassroom.distance}</ThemedText>
+                </>
+              ) : (
+                <ThemedText style={styles.boxText}>찾는 중...</ThemedText>
+              )}
+            </View>
           </View>
         ) : (
-          <FlatList
-            data={emptyClassrooms}
-            renderItem={renderClassroom}
-            keyExtractor={(item) => item.id.toString()}
-            style={styles.classroomList}
-          />
+          <TouchableOpacity style={styles.timetableCard} onPress={handleTimetablePress}>
+            <View style={styles.timetableIconContainer}>
+              <IconSymbol name="calendar" size={32} color="#666666" />
+              <IconSymbol name="exclamationmark" size={16} color="#FF3B30" style={styles.exclamationIcon} />
+            </View>
+            <ThemedText style={styles.timetableText}>시간표를 입력하세요</ThemedText>
+          </TouchableOpacity>
         )}
 
-      </View>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>빈 강의실</ThemedText>
+
+          </View>
+          <View style={styles.filterContainer}>
+            <View style={styles.sortIcon}>
+              <IconSymbol name="arrow.up.arrow.down" size={16} color="#666666" />
+            </View>
+            <TouchableOpacity style={styles.filterButton} onPress={handleStartTimePress}>
+              <IconSymbol name="clock" size={16} color="#666666" />
+              <ThemedText style={[styles.filterButtonText, selectedStartTime && styles.selectedFilterText]}>
+                {selectedStartTime || '시작 시간'}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterButton} onPress={handleDurationPress}>
+              <ThemedText style={[styles.filterButtonText, selectedDuration && styles.selectedFilterText]}>
+                {selectedDuration || '사용 시간'}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterButton} onPress={handleOutletPress}>
+              <ThemedText style={[styles.filterButtonText, selectedOutlets.length > 0 && styles.selectedFilterText]}>
+                {selectedOutlets.length > 0 ? selectedOutlets.join(', ') : '콘센트'}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          {finalIsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.tint} />
+              <ThemedText style={styles.loadingText}>빈 강의실을 찾는 중...</ThemedText>
+            </View>
+          ) : (
+            <View>
+              {emptyClassrooms.map(item => renderClassroom({ item }))}
+            </View>
+          )}
+
+        </View>
+      </ScrollView>
 
       <View style={styles.floatingNavigation}>
         <TouchableOpacity style={[styles.floatingButton, styles.activeFloatingButton]}>
