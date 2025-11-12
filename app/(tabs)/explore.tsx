@@ -1,24 +1,51 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import MapComponent from '@/components/map-component';
+import { useFavorites } from '@/hooks/use-favorites';
 
 export default function MapScreen() {
   const [selectedClassroom, setSelectedClassroom] = useState<any>(null);
+  const { toggleFavorite, isFavorite } = useFavorites();
 
   // 빈강의실 데이터 (임시)
   const emptyClassrooms = [
-    { id: 1, name: 'IT-5호관 342', distance: '200m', outlets: ['책상', '벽'], latitude: 36.1234, longitude: 128.5678 },
-    { id: 2, name: 'IT-5호관 341', distance: '201m', outlets: ['책상'], latitude: 36.1235, longitude: 128.5679 },
-    { id: 3, name: 'IT-5호관 340', distance: '202m', outlets: ['벽'], latitude: 36.1236, longitude: 128.5680 },
-    { id: 4, name: 'IT-5호관 339', distance: '203m', outlets: ['책상', '벽'], latitude: 36.1237, longitude: 128.5681 },
-    { id: 5, name: 'IT-5호관 338', distance: '204m', outlets: [], latitude: 36.1238, longitude: 128.5682 },
-    { id: 6, name: 'IT-5호관 337', distance: '205m', outlets: ['책상'], latitude: 36.1239, longitude: 128.5683 },
+    { id: 1, name: 'IT-5호관 342', distance: '200m', outlets: ['책상', '벽'], latitude: 36.1234, longitude: 128.5678, building_name: 'IT-5호관', room_number: '342' },
+    { id: 2, name: 'IT-5호관 341', distance: '201m', outlets: ['책상'], latitude: 36.1235, longitude: 128.5679, building_name: 'IT-5호관', room_number: '341' },
+    { id: 3, name: 'IT-5호관 340', distance: '202m', outlets: ['벽'], latitude: 36.1236, longitude: 128.5680, building_name: 'IT-5호관', room_number: '340' },
+    { id: 4, name: 'IT-5호관 339', distance: '203m', outlets: ['책상', '벽'], latitude: 36.1237, longitude: 128.5681, building_name: 'IT-5호관', room_number: '339' },
+    { id: 5, name: 'IT-5호관 338', distance: '204m', outlets: [], latitude: 36.1238, longitude: 128.5682, building_name: 'IT-5호관', room_number: '338' },
+    { id: 6, name: 'IT-5호관 337', distance: '205m', outlets: ['책상'], latitude: 36.1239, longitude: 128.5683, building_name: 'IT-5호관', room_number: '337' },
   ];
 
   const handleClassroomSelect = (classroom: any) => {
     setSelectedClassroom(classroom);
+  };
+
+  const handleFavoritePress = async (classroom: any) => {
+    const classroomData = {
+      id: classroom.id,
+      building_name: classroom.building_name,
+      room_number: classroom.room_number,
+      lat: classroom.latitude,
+      lng: classroom.longitude,
+      mon: '[]',
+      tue: '[]',
+      wed: '[]',
+      thu: '[]',
+      fri: '[]',
+    };
+
+    const favorite = isFavorite(classroom.id);
+    await toggleFavorite(classroomData);
+    Alert.alert(
+      favorite ? '즐겨찾기 제거' : '즐겨찾기 추가',
+      favorite 
+        ? `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에서 제거했습니다.`
+        : `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에 추가했습니다.`,
+      [{ text: '확인' }]
+    );
   };
 
   return (
@@ -40,39 +67,55 @@ export default function MapScreen() {
       <View style={styles.listContainer}>
         <ThemedText style={styles.listTitle}>빈 강의실</ThemedText>
         <ScrollView style={styles.classroomList} showsVerticalScrollIndicator={false}>
-          {emptyClassrooms.map((classroom) => (
-            <TouchableOpacity
-              key={classroom.id}
-              style={[
-                styles.classroomItem,
-                selectedClassroom?.id === classroom.id && styles.selectedClassroomItem
-              ]}
-              onPress={() => handleClassroomSelect(classroom)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.classroomInfo}>
-                <ThemedText style={styles.classroomName}>{classroom.name}</ThemedText>
-                <ThemedText style={styles.classroomDistance}>{classroom.distance}</ThemedText>
-                {classroom.outlets.length > 0 && (
-                  <View style={styles.outletContainer}>
-                    {classroom.outlets.map((outlet, index) => (
-                      <View key={index} style={styles.outletTag}>
-                        <ThemedText style={styles.outletText}>{outlet}</ThemedText>
-                      </View>
-                    ))}
+          {emptyClassrooms.map((classroom) => {
+            const favorite = isFavorite(classroom.id);
+            return (
+              <TouchableOpacity
+                key={classroom.id}
+                style={[
+                  styles.classroomItem,
+                  selectedClassroom?.id === classroom.id && styles.selectedClassroomItem
+                ]}
+                onPress={() => handleClassroomSelect(classroom)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.classroomInfo}>
+                  <View style={styles.classroomNameRow}>
+                    <ThemedText style={styles.classroomName}>{classroom.name}</ThemedText>
                   </View>
-                )}
-              </View>
-              <View style={styles.classroomActions}>
-                <TouchableOpacity style={styles.detailButton}>
-                  <ThemedText style={styles.detailButtonText}>상세정보</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navigateButton}>
-                  <IconSymbol name="location" size={16} color="#007AFF" />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+                  <ThemedText style={styles.classroomDistance}>{classroom.distance}</ThemedText>
+                  {classroom.outlets.length > 0 && (
+                    <View style={styles.outletContainer}>
+                      {classroom.outlets.map((outlet, index) => (
+                        <View key={index} style={styles.outletTag}>
+                          <ThemedText style={styles.outletText}>{outlet}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+                <View style={styles.classroomActions}>
+                  <TouchableOpacity
+                    style={styles.favoriteButton}
+                    onPress={() => handleFavoritePress(classroom)}
+                    activeOpacity={0.6}
+                  >
+                    <IconSymbol
+                      name={favorite ? 'heart.fill' : 'heart'}
+                      size={20}
+                      color={favorite ? '#FF3B30' : '#666666'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.detailButton}>
+                    <ThemedText style={styles.detailButtonText}>상세정보</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.navigateButton}>
+                    <IconSymbol name="location" size={16} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
     </View>
@@ -143,11 +186,15 @@ const styles = StyleSheet.create({
   classroomInfo: {
     flex: 1,
   },
+  classroomNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   classroomName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#000000',
-    marginBottom: 4,
   },
   classroomDistance: {
     fontSize: 14,
@@ -173,6 +220,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  favoriteButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   detailButton: {
     paddingHorizontal: 12,

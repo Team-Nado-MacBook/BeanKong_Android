@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, View, Modal, ActivityIndicator, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -8,6 +8,7 @@ import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setupDatabase, getAllClassrooms, Classroom } from '../../database';
 import { useLocation } from '@/context/location-context';
+import { useFavorites } from '@/hooks/use-favorites';
 
 const timePeriods = [
     { start: "08:00", end: "08:50", periods: ["0"] },
@@ -110,6 +111,7 @@ export default function HomeScreen() {
   const { location: userLocation, locationPermission, isLoading: isLocationLoading } = useLocation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { toggleFavorite, isFavorite } = useFavorites();
 
   const [hasTimetable, setHasTimetable] = useState(false);
   const [nextClass, setNextClass] = useState<any>(null);
@@ -306,20 +308,56 @@ export default function HomeScreen() {
   };
 
   const handleMapPress = () => router.push('/map');
+  const handleFavoritesPress = () => router.push('/(tabs)/favorites');
   const handleClassroomPress = (classroom: any) => console.log('강의실 선택:', classroom.building_name, classroom.room_number);
+
+  const handleFavoritePress = async (classroom: Classroom) => {
+    const favorite = isFavorite(classroom.id);
+    await toggleFavorite(classroom);
+    Alert.alert(
+      favorite ? '즐겨찾기 제거' : '즐겨찾기 추가',
+      favorite 
+        ? `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에서 제거했습니다.`
+        : `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에 추가했습니다.`,
+      [{ text: '확인' }]
+    );
+  };
 
   const outletOptions = ['책상', '벽', '없음'];
 
-  const renderClassroom = ({ item }: { item: Classroom }) => (
-    <TouchableOpacity key={item.id} style={styles.classroomItem} onPress={() => handleClassroomPress(item)} activeOpacity={0.7}>
-      <View style={styles.classroomInfo}>
-        <ThemedText style={styles.classroomName}>{`${item.building_name} ${item.room_number}`}</ThemedText>
-      </View>
-      <TouchableOpacity style={styles.detailButton}>
-        <ThemedText style={styles.detailButtonText}>상세정보 &gt;</ThemedText>
+  const renderClassroom = ({ item }: { item: Classroom }) => {
+    const favorite = isFavorite(item.id);
+    return (
+      <TouchableOpacity 
+        key={item.id} 
+        style={styles.classroomItem} 
+        onPress={() => handleClassroomPress(item)} 
+        activeOpacity={0.7}
+      >
+        <View style={styles.classroomInfo}>
+          <View style={styles.classroomNameRow}>
+            <ThemedText style={styles.classroomName}>{`${item.building_name} ${item.room_number}`}</ThemedText>
+          </View>
+        </View>
+        <View style={styles.classroomActions}>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={() => handleFavoritePress(item)}
+            activeOpacity={0.6}
+          >
+            <IconSymbol
+              name={favorite ? 'heart.fill' : 'heart'}
+              size={20}
+              color={favorite ? '#FF3B30' : '#666666'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.detailButton}>
+            <ThemedText style={styles.detailButtonText}>상세정보 &gt;</ThemedText>
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   const finalIsLoading = isLoading || isLocationLoading;
 
@@ -410,7 +448,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       <View style={styles.floatingNavigation}>
-        <TouchableOpacity style={[styles.floatingButton, styles.activeFloatingButton]}>
+        <TouchableOpacity style={[styles.floatingButton, styles.activeFloatingButton]} onPress={handleFavoritesPress}>
           <IconSymbol name="heart.fill" size={20} color="#FFFFFF"/>
         </TouchableOpacity>
         <TouchableOpacity style={styles.floatingButton} onPress={handleMapPress}>
@@ -561,9 +599,12 @@ const styles = StyleSheet.create({
   },
   classroomItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E5E5' },
   classroomInfo: { flex: 1 },
-  classroomName: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 4 },
+  classroomNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  classroomName: { fontSize: 16, fontWeight: '600', color: '#000000' },
   classroomDistance: { fontSize: 14, color: '#666666' },
-  detailButton: { paddingHorizontal: 12, paddingVertical: 8 },
+  classroomActions: { flexDirection: 'row', alignItems: 'center' },
+  favoriteButton: { paddingHorizontal: 8, paddingVertical: 8, marginRight: 8 },
+  detailButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F5F5F5' },
   detailButtonText: { fontSize: 14, color: '#666666' },
   floatingNavigation: { position: 'absolute', bottom: 70, left: 20, flexDirection: 'row', gap: 8 },
   floatingButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, borderWidth: 1, borderColor: '#E5E5E5' },
