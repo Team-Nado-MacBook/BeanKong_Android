@@ -37,6 +37,38 @@ export interface Course {
 const buildingData = require('../assets/data/merged_buildings.json');
 const courseData = require('../assets/data/class_schedule.json');
 
+// Normalize building name from class_schedule.json to match merged_buildings.json
+function normalizeBuildingName(fullBuilding: any): string {
+  try {
+    const text = typeof fullBuilding === 'string' ? fullBuilding : '';
+    if (!text) return '';
+    const norm = (s: string) => s.replace(/\s+/g, '').replace(/캠퍼스/g, '').toUpperCase();
+    const nText = norm(text);
+    // Find the longest building name whose normalized form is contained in the full text
+    let best: any = null;
+    for (const b of buildingData) {
+      const nb = norm(b.name || '');
+      if (!nb) continue;
+      if (nText.includes(nb)) {
+        if (!best || (best.name && nb.length > norm(best.name).length)) {
+          best = b;
+        }
+      }
+    }
+    if (best && best.name) return best.name;
+    // Fallback: return original string trimmed of leading campus phrases by taking last 2 tokens
+    const parts = text.trim().split(/\s+/);
+    if (parts.length >= 2) return parts.slice(-2).join(' ');
+    return parts[parts.length - 1] || text;
+  } catch {
+    return typeof fullBuilding === 'string' ? fullBuilding : '';
+  }
+}
+
+function normalizeRoomValue(room: string): string {
+  return (room || '').toString().toUpperCase().replace(/\s+/g, '').replace(/-/g, '');
+}
+
 
 // --- DATABASE SETUP ---
 export const setupDatabase = async () => {
@@ -96,9 +128,10 @@ export const setupDatabase = async () => {
         console.log('Courses table is empty, populating...');
         await db.withTransactionAsync(async () => {
             for (const course of courseData) {
+                const normalizedBuilding = normalizeBuildingName(course.building);
                 await db.runAsync(
                     `INSERT OR IGNORE INTO courses (subject, class_id, building, room, schedule) VALUES (?, ?, ?, ?, ?);`,
-                    course.subject, course.class_id, course.building, course.room, JSON.stringify(course.schedule || [])
+                    course.subject, course.class_id, normalizedBuilding, course.room, JSON.stringify(course.schedule || [])
                 );
             }
         });
@@ -137,6 +170,36 @@ export const searchCourses = async (query: string): Promise<Course[]> => {
         );
     } catch (e) {
         console.error("Error in searchCourses:", e);
+        throw e;
+    }
+}
+
+export const getCoursesByClassroom = async (buildingName: string, roomNumber: string): Promise<Course[]> => {
+    try {
+        const db = await getDb();
+        // Match by building equality or containing the canonical name, and room with normalized comparison
+        return await db.getAllAsync<Course>(
+            `SELECT * FROM courses
+             WHERE (building = ? OR building LIKE ?)
+               AND (
+                 room = ? OR
+                 REPLACE(REPLACE(UPPER(room), '-', ''), ' ', '') = REPLACE(REPLACE(UPPER(?), '-', ''), ' ', '')
+               );`,
+            [buildingName, `%${buildingName}%`, roomNumber, roomNumber]
+        );
+    } catch (e) {
+        console.error("Error in getCoursesByClassroom:", e);
+        throw e;
+    }
+}
+
+export const getClassroomById = async (id: number): Promise<Classroom | null> => {
+    try {
+        const db = await getDb();
+        const result = await db.getFirstAsync<Classroom>('SELECT * FROM classrooms WHERE id = ?;', [id]);
+        return result || null;
+    } catch (e) {
+        console.error("Error in getClassroomById:", e);
         throw e;
     }
 }

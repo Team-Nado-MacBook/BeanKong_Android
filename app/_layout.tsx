@@ -23,6 +23,7 @@ export default function RootLayout() {
           <Stack.Screen name="map" options={{ headerShown: false }} />
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="timetable" options={{ headerShown: false }} />
+          <Stack.Screen name="classroom-detail" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
     </LocationProvider>
