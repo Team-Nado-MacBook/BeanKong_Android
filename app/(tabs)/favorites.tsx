@@ -76,7 +76,12 @@ export default function FavoritesScreen() {
           </View>
         ) : (
           favoriteClassrooms.map((classroom) => (
-            <TouchableOpacity key={classroom.id} style={styles.classroomItem} activeOpacity={0.7}>
+            <TouchableOpacity
+              key={classroom.id}
+              style={styles.classroomItem}
+              activeOpacity={0.7}
+              onPress={() => router.push(`/classroom-detail?id=${classroom.id}`)}
+            >
               <View style={styles.classroomInfo}>
                 <ThemedText style={styles.classroomName}>{`${classroom.building_name} ${classroom.room_number}`}</ThemedText>
               </View>
@@ -108,4 +113,3 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666666' },
 });
-
