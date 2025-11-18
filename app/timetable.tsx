@@ -116,12 +116,14 @@ export default function TimetableScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/')} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
+        <ThemedText style={styles.headerTitle}>시간표</ThemedText>
+        <View style={styles.headerRightPlaceholder} />
       </View>
-      <ThemedText style={styles.semesterTitle}>2025년 2학기</ThemedText>
       <ScrollView style={styles.content}>
+        <ThemedText style={styles.semesterTitle}>2025년 2학기</ThemedText>
         {/* 시간표 그리드 */}
         <View style={styles.timetableContainer}>
           {/* 요일 헤더 */}
@@ -220,18 +222,34 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 40,
+    paddingTop: 25,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
   },
   backButton: {
-    padding: 5,
+    padding: 8,
+    minWidth: 40,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000000',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerRightPlaceholder: {
+    width: 40,
   },
   semesterTitle: {
-    fontSize: 16,
+    fontSize: 25,
     fontWeight: '600',
     color: '#000000',
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    marginTop: 30,
+    marginLeft: -20,
   },
   content: {
     flex: 1,

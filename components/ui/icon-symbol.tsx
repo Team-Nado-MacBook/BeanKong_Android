@@ -27,6 +27,8 @@ const MAPPING = {
   'arrow.down': 'keyboard-arrow-down',
   'arrow.up.arrow.down': 'unfold-more',
   'heart.fill': 'favorite',
+  'star': 'star-border',
+  'star.fill': 'star',
   'map': 'map',
   'location': 'location-on',
   'location.circle': 'my-location',

@@ -63,16 +63,16 @@ export default function FavoritesScreen() {
         <TouchableOpacity style={styles.backButtonContainer} onPress={() => router.back()}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Favorites</ThemedText>
+        <ThemedText style={styles.headerTitle}>즐겨찾기</ThemedText>
         <View style={styles.headerRightPlaceholder} />
       </View>
 
       <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
         {favoriteClassrooms.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <IconSymbol name="heart" size={48} color="#CCCCCC" />
-            <ThemedText style={styles.emptyText}>No favorites yet</ThemedText>
-            <ThemedText style={styles.emptySubText}>Tap the heart in the list to add favorites</ThemedText>
+            <IconSymbol name="star" size={48} color="#CCCCCC" />
+            <ThemedText style={styles.emptyText}>즐겨찾기로 추가된 강의실이 없습니다.</ThemedText>
+            <ThemedText style={styles.emptySubText}>별을 눌러 원하는 강의실을 즐겨찾기 목록에 추가하세요!</ThemedText>
           </View>
         ) : (
           favoriteClassrooms.map((classroom) => (
@@ -86,7 +86,7 @@ export default function FavoritesScreen() {
                 <ThemedText style={styles.classroomName}>{`${classroom.building_name} ${classroom.room_number}`}</ThemedText>
               </View>
               <TouchableOpacity style={styles.favoriteButton} onPress={() => handleRemoveFavorite(classroom.id)}>
-                <IconSymbol name="heart.fill" size={20} color="#FF3B30" />
+                <IconSymbol name="star.fill" size={20} color="#FF3B30" />
               </TouchableOpacity>
             </TouchableOpacity>
           ))
@@ -98,10 +98,10 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: '#E5E5E5' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 25, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E5E5' },
   backButtonContainer: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start', paddingHorizontal: 8 },
   headerRightPlaceholder: { width: 44, height: 44 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#000000', flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#000000', flex: 1, textAlign: 'center' },
   listContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   classroomItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E5E5' },
   classroomInfo: { flex: 1 },
