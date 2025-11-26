@@ -1,16 +1,16 @@
-﻿import { ThemedText } from "@/components/themed-text";
+import { ThemedText } from "@/components/themed-text";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useLocation } from "@/context/location-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useFavorites } from "@/hooks/use-favorites";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import DurationModal from "@/components/DurationModal";
+import OutletModal from "@/components/OutletModal";
+import TimeModal from "@/components/TimeModal";
 import {
   ActivityIndicator,
-  Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -147,7 +147,7 @@ export default function HomeScreen() {
   } = useLocation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
-  const { toggleFavorite, isFavorite } = useFavorites();
+
 
   const [hasTimetable, setHasTimetable] = useState(false);
   const [nextClass, setNextClass] = useState<any>(null);
@@ -174,13 +174,11 @@ export default function HomeScreen() {
   const getFilteredEmptyClassrooms = (
     allClassrooms: Classroom[],
     selectedStartTime: string,
-    selectedDuration: string
+    selectedDuration: string,
+    selectedOutlets: string[]
   ): Classroom[] => {
     const dayMapping = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-    const currentDayKey = dayMapping[new Date().getDay()] as keyof Omit<
-      Classroom,
-      "id" | "building_name" | "lat" | "lng" | "room_number"
-    >;
+    const currentDayKey = dayMapping[new Date().getDay()];
 
     let periodsToFilter: string[] = [];
     if (selectedStartTime || selectedDuration) {
@@ -192,61 +190,69 @@ export default function HomeScreen() {
       periodsToFilter = getCurrentPeriods();
     }
 
-    if (
-      periodsToFilter.length === 0 ||
-      !currentDayKey ||
-      !["mon", "tue", "wed", "thu", "fri"].includes(currentDayKey)
-    ) {
-      return allClassrooms;
-    }
+    let filteredClassrooms = allClassrooms;
 
-    return allClassrooms.filter((classroom) => {
-      try {
-        const daySchedule = JSON.parse(classroom[currentDayKey] as string);
-        if (!Array.isArray(daySchedule)) return true;
+    if (
+      periodsToFilter.length > 0 &&
+      currentDayKey &&
+      ["mon", "tue", "wed", "thu", "fri"].includes(currentDayKey)
+    ) {
+      filteredClassrooms = filteredClassrooms.filter((classroom) => {
+        const daySchedule = classroom.parsedSchedule?.[currentDayKey];
+        if (!daySchedule || !Array.isArray(daySchedule)) return true;
         const isOccupied = daySchedule.some((classPeriod: string) =>
           periodsToFilter.includes(classPeriod)
         );
         return !isOccupied;
-      } catch {
-        return true;
-      }
-    });
+      });
+    }
+
+    if (selectedOutlets.length > 0) {
+      filteredClassrooms = filteredClassrooms.filter((classroom) => {
+        if (!classroom.outlets) return false;
+        return selectedOutlets.every((outlet) =>
+          classroom.outlets?.includes(outlet)
+        );
+      });
+    }
+
+    return filteredClassrooms;
   };
 
-  const findEmptyClassrooms = useCallback(() => {
-    const empty = getFilteredEmptyClassrooms(
+  const filteredEmptyClassrooms = useMemo(() => {
+    return getFilteredEmptyClassrooms(
       allClassrooms,
       selectedStartTime,
-      selectedDuration
+      selectedDuration,
+      selectedOutlets
     );
+  }, [allClassrooms, selectedStartTime, selectedDuration, selectedOutlets]);
 
+  useEffect(() => {
     if (locationPermission && userLocation) {
-      const classroomsWithDistance = empty.map((classroom) => {
-        const distance = getDistance(
-          userLocation.coords.latitude,
-          userLocation.coords.longitude,
-          classroom.lat,
-          classroom.lng
-        );
-        return { ...classroom, distance };
-      });
+      const classroomsWithDistance = filteredEmptyClassrooms.map(
+        (classroom) => {
+          const distance = getDistance(
+            userLocation.coords.latitude,
+            userLocation.coords.longitude,
+            classroom.lat,
+            classroom.lng
+          );
+          return { ...classroom, distance };
+        }
+      );
 
       classroomsWithDistance.sort(
         (a, b) => (a.distance ?? 0) - (b.distance ?? 0)
       );
       setEmptyClassrooms(classroomsWithDistance);
     } else {
-      empty.sort((a, b) => a.building_name.localeCompare(b.building_name));
-      setEmptyClassrooms(empty);
+      const sortedClassrooms = [...filteredEmptyClassrooms].sort((a, b) =>
+        a.building_name.localeCompare(b.building_name)
+      );
+      setEmptyClassrooms(sortedClassrooms);
     }
-  }, [
-    allClassrooms,
-    selectedStartTime,
-    selectedDuration,
-    locationPermission,
-    userLocation,
-  ]);
+  }, [filteredEmptyClassrooms, locationPermission, userLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -260,18 +266,26 @@ export default function HomeScreen() {
         }
         await setupDatabase();
         const allClassroomsFromDB = await getAllClassrooms();
-        setAllClassrooms(allClassroomsFromDB);
+        const parsedClassrooms = allClassroomsFromDB.map((classroom) => {
+          const parsedSchedule: { [key: string]: string[] } = {};
+          const dayMapping = ["mon", "tue", "wed", "thu", "fri"];
+          dayMapping.forEach((day) => {
+            try {
+              parsedSchedule[day] = JSON.parse(
+                classroom[day as keyof Classroom] as string
+              );
+            } catch {
+              parsedSchedule[day] = [];
+            }
+          });
+          return { ...classroom, parsedSchedule };
+        });
+        setAllClassrooms(parsedClassrooms);
         setIsLoading(false);
       };
       loadData();
     }, [])
   );
-
-  useEffect(() => {
-    if (allClassrooms.length > 0) {
-      findEmptyClassrooms();
-    }
-  }, [allClassrooms, findEmptyClassrooms]);
 
   const findNextClass = (classes: any[]) => {
     const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
@@ -390,66 +404,48 @@ export default function HomeScreen() {
 
   const handleMapPress = () => router.push("/map");
   const handleFavoritesPress = () => router.push("/(tabs)/favorites");
-  const handleClassroomPress = (classroom: any) =>
+  const handleClassroomPress = useCallback((classroom: any) => {
     console.log("강의실 선택:", classroom.building_name, classroom.room_number);
-  const handleDetailPress = (classroom: Classroom) => {
+  }, []);
+  const handleDetailPress = useCallback((classroom: Classroom) => {
     router.push(`/classroom-detail?id=${classroom.id}`);
-  };
+  }, []);
 
-  const handleFavoritePress = async (classroom: Classroom) => {
-    const favorite = isFavorite(classroom.id);
-    await toggleFavorite(classroom);
-    Alert.alert(
-      favorite ? "즐겨찾기 해제" : "즐겨찾기 추가",
-      favorite
-        ? `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에서 해제했습니다.`
-        : `${classroom.building_name} ${classroom.room_number}을(를) 즐겨찾기에 추가했습니다.`,
-      [{ text: "확인" }]
-    );
-  };
+
 
   const outletOptions = ["벽면", "바닥", "상관없음"];
 
-  const renderClassroom = ({ item }: { item: Classroom }) => {
-    const favorite = isFavorite(item.id);
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={styles.classroomItem}
-        onPress={() => handleClassroomPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.classroomInfo}>
-          <View style={styles.classroomNameRow}>
-            <ThemedText style={styles.classroomName}>
-              {`${item.building_name} ${item.room_number}`}
-            </ThemedText>
+  const renderClassroom = useCallback(
+    ({ item }: { item: Classroom }) => {
+      return (
+        <TouchableOpacity
+          key={item.id}
+          style={styles.classroomItem}
+          onPress={() => handleClassroomPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.classroomInfo}>
+            <View style={styles.classroomNameRow}>
+              <ThemedText style={styles.classroomName}>
+                {`${item.building_name} ${item.room_number}`}
+              </ThemedText>
+            </View>
           </View>
-        </View>
-        <View style={styles.classroomActions}>
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={() => handleFavoritePress(item)}
-            activeOpacity={0.6}
-          >
-            <IconSymbol
-              name={favorite ? "heart.fill" : "heart"}
-              size={20}
-              color={favorite ? "#FF3B30" : "#666666"}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.detailButton}
-            onPress={() => handleDetailPress(item)}
-          >
-            <ThemedText style={styles.detailButtonText}>
-              상세정보 &gt;
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+          <View style={styles.classroomActions}>
+            <TouchableOpacity
+              style={styles.detailButton}
+              onPress={() => handleDetailPress(item)}
+            >
+              <ThemedText style={styles.detailButtonText}>
+                상세정보 &gt;
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleClassroomPress, handleDetailPress]
+  );
 
   const finalIsLoading = isLoading || isLocationLoading;
 
@@ -458,12 +454,20 @@ export default function HomeScreen() {
       <ScrollView>
         <View style={styles.header}>
           <ThemedText style={styles.title}>BeanKong</ThemedText>
-          <TouchableOpacity
-            style={styles.menuButton}
-            onPress={handleTimetablePress}
-          >
-            <IconSymbol name="ellipsis" size={24} color="#666666" />
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={handleTimetablePress}
+            >
+              <IconSymbol name="calendar" size={24} color="#666666" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={handleFavoritesPress}
+            >
+              <IconSymbol name="star" size={24} color="#666666" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {hasTimetable ? (
@@ -608,228 +612,33 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 시간 선택 모달 */}
-      <Modal
+      <TimeModal
         visible={showTimeModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowTimeModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowTimeModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>시작 시간 선택</ThemedText>
-              <TouchableOpacity onPress={() => setShowTimeModal(false)}>
-                <IconSymbol name="xmark" size={24} color="#666666" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.dialContainer}>
-              <View style={styles.dialColumn}>
-                <ThemedText style={styles.dialLabel}>시</ThemedText>
-                <ScrollView
-                  style={styles.dialScroll}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 9).map((hour) => (
-                    <TouchableOpacity
-                      key={hour}
-                      style={[
-                        styles.dialItem,
-                        selectedHour === hour && styles.selectedDialItem,
-                      ]}
-                      onPress={() => setSelectedHour(hour)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.dialItemText,
-                          selectedHour === hour && styles.selectedDialItemText,
-                        ]}
-                      >
-                        {hour.toString().padStart(2, "0")}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.dialColumn}>
-                <ThemedText style={styles.dialLabel}>분</ThemedText>
-                <ScrollView
-                  style={styles.dialScroll}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {Array.from({ length: 6 }, (_, i) => i * 10).map((minute) => (
-                    <TouchableOpacity
-                      key={minute}
-                      style={[
-                        styles.dialItem,
-                        selectedMinute === minute && styles.selectedDialItem,
-                      ]}
-                      onPress={() => setSelectedMinute(minute)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.dialItemText,
-                          selectedMinute === minute &&
-                            styles.selectedDialItemText,
-                        ]}
-                      >
-                        {minute.toString().padStart(2, "0")}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleTimeSelect}
-            >
-              <ThemedText style={styles.confirmButtonText}>확인</ThemedText>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setShowTimeModal(false)}
+        onSelect={handleTimeSelect}
+        selectedHour={selectedHour}
+        selectedMinute={selectedMinute}
+        setSelectedHour={setSelectedHour}
+        setSelectedMinute={setSelectedMinute}
+      />
 
-      {/* 기간 선택 모달 */}
-      <Modal
+      <DurationModal
         visible={showDurationModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDurationModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDurationModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>사용 시간 선택</ThemedText>
-              <TouchableOpacity onPress={() => setShowDurationModal(false)}>
-                <IconSymbol name="xmark" size={24} color="#666666" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.dialContainer}>
-              <View style={styles.dialColumn}>
-                <ThemedText style={styles.dialLabel}>시간</ThemedText>
-                <ScrollView
-                  style={styles.dialScroll}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {Array.from({ length: 8 }, (_, i) => i + 1).map((hour) => (
-                    <TouchableOpacity
-                      key={hour}
-                      style={[
-                        styles.dialItem,
-                        selectedDurationHour === hour &&
-                          styles.selectedDialItem,
-                      ]}
-                      onPress={() => setSelectedDurationHour(hour)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.dialItemText,
-                          selectedDurationHour === hour &&
-                            styles.selectedDialItemText,
-                        ]}
-                      >
-                        {hour}h
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.dialColumn}>
-                <ThemedText style={styles.dialLabel}>분</ThemedText>
-                <ScrollView
-                  style={styles.dialScroll}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {Array.from({ length: 6 }, (_, i) => i * 10).map((minute) => (
-                    <TouchableOpacity
-                      key={minute}
-                      style={[
-                        styles.dialItem,
-                        selectedDurationMinute === minute &&
-                          styles.selectedDialItem,
-                      ]}
-                      onPress={() => setSelectedDurationMinute(minute)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.dialItemText,
-                          selectedDurationMinute === minute &&
-                            styles.selectedDialItemText,
-                        ]}
-                      >
-                        {minute}m
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleDurationSelect}
-            >
-              <ThemedText style={styles.confirmButtonText}>확인</ThemedText>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setShowDurationModal(false)}
+        onSelect={handleDurationSelect}
+        selectedDurationHour={selectedDurationHour}
+        selectedDurationMinute={selectedDurationMinute}
+        setSelectedDurationHour={setSelectedDurationHour}
+        setSelectedDurationMinute={setSelectedDurationMinute}
+      />
 
-      {/* 콘센트 필터 모달 */}
-      <Modal
+      <OutletModal
         visible={showOutletModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowOutletModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowOutletModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>콘센트 선택</ThemedText>
-              <TouchableOpacity onPress={() => setShowOutletModal(false)}>
-                <IconSymbol name="xmark" size={24} color="#666666" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalList}>
-              {outletOptions.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.modalItem,
-                    selectedOutlets.includes(option) && styles.selectedItem,
-                  ]}
-                  onPress={() => handleOutletSelect(option)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.modalItemText,
-                      selectedOutlets.includes(option) &&
-                        styles.selectedItemText,
-                    ]}
-                  >
-                    {option}
-                  </ThemedText>
-                  {selectedOutlets.includes(option) && (
-                    <IconSymbol name="checkmark" size={20} color="#007AFF" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setShowOutletModal(false)}
+        onSelect={handleOutletSelect}
+        selectedOutlets={selectedOutlets}
+        outletOptions={outletOptions}
+      />
     </View>
   );
 }
@@ -849,6 +658,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000000",
     paddingBottom: 1,
+  },
+  headerButtons: {
+    flexDirection: "row",
   },
   menuButton: { padding: 8 },
   timetableCard: {
@@ -1008,79 +820,4 @@ const styles = StyleSheet.create({
     borderColor: "#E5E5E5",
   },
   activeFloatingButton: { backgroundColor: "#007AFF" },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "70%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-  },
-  modalTitle: { fontSize: 18, fontWeight: "600", color: "#000000" },
-  modalList: { paddingVertical: 8 },
-  modalItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F5F5",
-  },
-  selectedItem: { backgroundColor: "#F0F8FF" },
-  modalItemText: { fontSize: 16, color: "#000000" },
-  selectedItemText: { color: "#007AFF", fontWeight: "500" },
-  dialContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 20,
-  },
-  dialColumn: { flex: 1, alignItems: "center" },
-  dialLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000000",
-    marginBottom: 12,
-  },
-  dialScroll: { height: 200, width: "100%" },
-  dialItem: {
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 2,
-    borderRadius: 8,
-  },
-  selectedDialItem: { backgroundColor: "#F0F8FF" },
-  dialItemText: { fontSize: 18, color: "#666666" },
-  selectedDialItemText: {
-    color: "#007AFF",
-    fontWeight: "600",
-  },
-  confirmButton: {
-    backgroundColor: "#007AFF",
-    marginHorizontal: 20,
-    marginBottom: 20,
-    height: 50,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  confirmButtonText: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
 });

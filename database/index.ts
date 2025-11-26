@@ -21,6 +21,8 @@ export interface Classroom {
   wed: string;
   thu: string;
   fri: string;
+  outlets?: string;
+  parsedSchedule?: { [key: string]: string[] };
 }
 
 export interface Course {
@@ -88,6 +90,7 @@ export const setupDatabase = async () => {
         wed TEXT,
         thu TEXT,
         fri TEXT,
+        outlets TEXT,
         UNIQUE(building_name, room_number)
       );
 
@@ -109,13 +112,17 @@ export const setupDatabase = async () => {
         for (const building of buildingData) {
           for (const room of building.rooms) {
             await db.runAsync(
-              `INSERT INTO classrooms (building_name, lat, lng, room_number, mon, tue, wed, thu, fri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-              building.name, building.lat, building.lng, room.room,
+              `INSERT INTO classrooms (building_name, lat, lng, room_number, mon, tue, wed, thu, fri, outlets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+              building.name,
+              building.lat,
+              building.lng,
+              room.room,
               JSON.stringify(room.mon || []),
               JSON.stringify(room.tue || []),
               JSON.stringify(room.wen || []),
               JSON.stringify(room.thu || []),
-              JSON.stringify(room.fri || [])
+              JSON.stringify(room.fri || []),
+              room.outlets || ""
             );
           }
         }

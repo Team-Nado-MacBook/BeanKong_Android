@@ -83,7 +83,7 @@ export default function SearchScreen() {
         <ThemedText style={styles.classCode}>{item.class_id} / {item.building} {item.room}</ThemedText>
       </View>
       <View style={styles.addButton}>
-        <ThemedText style={styles.addButtonText}>Add</ThemedText>
+        <ThemedText style={styles.addButtonText}>추가</ThemedText>
         <IconSymbol name="chevron.right" size={16} color="#666666" />
       </View>
     </TouchableOpacity>
@@ -95,13 +95,13 @@ export default function SearchScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Search</ThemedText>
+        <ThemedText style={styles.headerTitle}>과목 검색</ThemedText>
         <View style={styles.placeholder} />
       </View>
 
       <View style={styles.content}>
         <View style={styles.searchContainer}>
-          <TextInput style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} placeholder="Search by subject or code" placeholderTextColor="#999999" autoFocus />
+          <TextInput style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} placeholder="검색할 과목명을 입력하세요" placeholderTextColor="#999999" autoFocus />
           <IconSymbol name="search" size={20} color="#666666" />
         </View>
 

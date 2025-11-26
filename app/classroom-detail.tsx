@@ -1,4 +1,4 @@
-﻿import { ThemedText } from "@/components/themed-text";
+import { ThemedText } from "@/components/themed-text";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Classroom, getClassroomById, setupDatabase } from "@/database";
 import { useFavorites } from "@/hooks/use-favorites";
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 
 const buildingsData = require("../assets/data/merged_buildings.json");
@@ -246,9 +247,6 @@ export default function ClassroomDetailScreen() {
   const classroomId = params.id ? parseInt(params.id, 10) : null;
 
   const [classroom, setClassroom] = useState<Classroom | null>(null);
-  const [roomSchedule, setRoomSchedule] = useState<{ [key: string]: string[] }>(
-    {}
-  );
   const [roomCourses, setRoomCourses] = useState<CourseFromJson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toggleFavorite, isFavorite } = useFavorites();
@@ -295,7 +293,6 @@ export default function ClassroomDetailScreen() {
           thu: room?.thu || [],
           fri: room?.fri || [],
         };
-        setRoomSchedule(scheduleByDay);
 
         const usedSlots = new Set<string>();
         Object.values(scheduleByDay).forEach((arr) =>
@@ -371,24 +368,36 @@ export default function ClassroomDetailScreen() {
   };
 
   const handleFavoritePress = async () => {
-    if (classroom) {
-      await toggleFavorite(classroom);
-    }
+    if (!classroom) return;
+
+    const isCurrentlyFavorite = isFavorite(classroom.id);
+    const title = isCurrentlyFavorite ? "즐겨찾기 제거" : "즐겨찾기 추가";
+    const message = isCurrentlyFavorite
+      ? "해당 강의실을 즐겨찾기에서 제거하시겠습니까?"
+      : "해당 강의실을 즐겨찾기에 추가하시겠습니까?";
+
+    Alert.alert(
+      title,
+      message,
+      [
+        {
+          text: "취소",
+          style: "cancel",
+        },
+        {
+          text: "확인",
+          onPress: async () => {
+            await toggleFavorite(classroom);
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <IconSymbol name="chevron.left" size={24} color="#000000" />
-          </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>강의실 상세정보</ThemedText>
-          <View style={styles.headerRightPlaceholder} />
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
           <ThemedText style={styles.loadingText}>로딩중...</ThemedText>
@@ -400,16 +409,6 @@ export default function ClassroomDetailScreen() {
   if (!classroom) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <IconSymbol name="chevron.left" size={24} color="#000000" />
-          </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>강의실 상세정보</ThemedText>
-          <View style={styles.headerRightPlaceholder} />
-        </View>
         <View style={styles.emptyContainer}>
           <ThemedText style={styles.emptyText}>
             강의실 정보를 찾을 수 없습니다.
@@ -427,25 +426,12 @@ export default function ClassroomDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButtonContainer} onPress={() => router.back()}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>강의실 상세정보</ThemedText>
-        <TouchableOpacity
-          style={styles.favoriteHeaderButton}
-          onPress={handleFavoritePress}
-        >
-          <IconSymbol
-            name={favorite ? "heart.fill" : "heart"}
-            size={24}
-            color={favorite ? "#FF3B30" : "#666666"}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRightPlaceholder} />
       </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>시간표</ThemedText>
@@ -543,26 +529,25 @@ export default function ClassroomDetailScreen() {
 
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>강의실 정보</ThemedText>
-          <ThemedText style={styles.sectionSubtitle}>
-            {`${classroom.building_name} ${classroom.room_number}`}
-          </ThemedText>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>위치</ThemedText>
-              <ThemedText style={styles.infoValue}>
-                {classroom.building_name} {classroom.room_number}
-              </ThemedText>
-            </View>
-            <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
               <ThemedText style={styles.infoLabel}>수용인원</ThemedText>
-              <ThemedText style={styles.infoValue}>정보 없음</ThemedText>
+              <ThemedText style={styles.infoValue}>30명</ThemedText>
             </View>
             <View style={styles.infoDivider} />
             <View style={styles.infoRow}>
               <ThemedText style={styles.infoLabel}>콘센트</ThemedText>
-              <ThemedText style={styles.infoValue}>정보 없음</ThemedText>
+              <ThemedText style={styles.infoValue}>벽면, 바닥</ThemedText>
             </View>
+            <View style={styles.infoDivider} />
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={handleFavoritePress}
+            >
+              <ThemedText style={styles.favoriteButtonText}>
+                {favorite ? "즐겨찾기에서 제거" : "즐겨찾기에 추가"}
+              </ThemedText>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -575,35 +560,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-  },
-  backButton: {
-    padding: 8,
-    minWidth: 40,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#000000",
-    flex: 1,
-    textAlign: "center",
-  },
-  favoriteHeaderButton: {
-    padding: 8,
-    minWidth: 40,
-    alignItems: "flex-end",
-  },
-  headerRightPlaceholder: {
-    width: 40,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 25, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E5E5' },
+  backButtonContainer: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start', paddingHorizontal: 8 },
+  headerRightPlaceholder: { width: 44, height: 44 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#000000', flex: 1, textAlign: 'center' },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -628,19 +588,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   section: {
-    marginTop: 24,
+    marginTop: 0,
     marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
     color: "#000000",
-    marginBottom: 12,
+    marginTop: 15,
+    marginBottom: 2,
   },
   sectionSubtitle: {
     fontSize: 14,
     color: "#666666",
-    marginTop: 2,
     marginBottom: 8,
   },
   infoCard: {
@@ -650,6 +610,7 @@ const styles = StyleSheet.create({
     paddingTop: 5,
     paddingBottom: 5,
     marginBottom: 13,
+    marginTop: 15,
     borderWidth: 1,
     borderColor: "#E5E5E5",
   },
@@ -749,5 +710,17 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     textAlign: "center",
     opacity: 0.9,
+  },
+  favoriteButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  favoriteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
