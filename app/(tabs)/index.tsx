@@ -459,7 +459,6 @@ export default function HomeScreen() {
               style={styles.menuButton}
               onPress={handleTimetablePress}
             >
-              <IconSymbol name="calendar" size={24} color="#666666" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.menuButton}
@@ -474,14 +473,11 @@ export default function HomeScreen() {
           <View style={styles.twoBoxesContainer}>
             <View style={styles.box}>
               {/* 여기: Next Class → 다음 수업 */}
-              <ThemedText style={styles.boxTitle}>다음 수업</ThemedText>
+              <ThemedText style={styles.boxTitle}>인기 강의실</ThemedText>
               {nextClass ? (
                 <>
                   <ThemedText style={styles.boxText}>
-                    {nextClass.name}
-                  </ThemedText>
-                  <ThemedText style={styles.boxSubText}>
-                    {nextClass.day} {nextClass.startTime}
+                    산격동 캠퍼스 IT대학5호관(IT융복합관) 434
                   </ThemedText>
                 </>
               ) : (
