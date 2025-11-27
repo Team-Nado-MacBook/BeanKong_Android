@@ -3,7 +3,6 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useLocation } from "@/context/location-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import DurationModal from "@/components/DurationModal";
@@ -149,8 +148,6 @@ export default function HomeScreen() {
   const colors = Colors[colorScheme ?? "light"];
 
 
-  const [hasTimetable, setHasTimetable] = useState(false);
-  const [nextClass, setNextClass] = useState<any>(null);
   const [nearestClassroom, setNearestClassroom] = useState<any>(null);
   const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
   const [emptyClassrooms, setEmptyClassrooms] = useState<
@@ -258,12 +255,6 @@ export default function HomeScreen() {
     useCallback(() => {
       const loadData = async () => {
         setIsLoading(true);
-        const savedClasses = await AsyncStorage.getItem("timetableClasses");
-        if (savedClasses) {
-          const classes = JSON.parse(savedClasses);
-          setHasTimetable(classes.length > 0);
-          if (classes.length > 0) findNextClass(classes);
-        }
         await setupDatabase();
         const allClassroomsFromDB = await getAllClassrooms();
         const parsedClassrooms = allClassroomsFromDB.map((classroom) => {
@@ -287,50 +278,6 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const findNextClass = (classes: any[]) => {
-    const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
-    const now = new Date();
-    const currentDay = dayNames[now.getDay()];
-    const currentTime = now.getHours() * 100 + now.getMinutes();
-
-    const allSchedules = classes.flatMap((c) =>
-      c.schedules.map((s: any) => ({
-        name: c.name,
-        day: s.day,
-        startTime: s.startTime,
-        dayIndex: dayNames.indexOf(s.day),
-        startTimeNum: parseInt(s.startTime.replace(":", ""), 10),
-      }))
-    );
-
-    const sortedSchedules = allSchedules.sort((a, b) => {
-      if (a.dayIndex !== b.dayIndex) {
-        return a.dayIndex - b.dayIndex;
-      }
-      return a.startTimeNum - b.startTimeNum;
-    });
-
-    let next: any = null;
-    for (const s of sortedSchedules) {
-      if (s.day === currentDay && s.startTimeNum > currentTime) {
-        next = s;
-        break;
-      }
-    }
-    if (!next) {
-      for (const s of sortedSchedules) {
-        if (s.dayIndex > dayNames.indexOf(currentDay)) {
-          next = s;
-          break;
-        }
-      }
-    }
-    if (!next && sortedSchedules.length > 0) {
-      next = sortedSchedules[0];
-    }
-    setNextClass(next);
-  };
-
   const findNearestEmptyClassroom = useCallback(() => {
     if (!locationPermission || emptyClassrooms.length === 0) {
       setNearestClassroom({
@@ -352,7 +299,6 @@ export default function HomeScreen() {
     }
   }, [emptyClassrooms, findNearestEmptyClassroom]);
 
-  const handleTimetablePress = () => router.push("/timetable");
   const handleStartTimePress = () => {
     setShowTimeModal(true);
   };
@@ -457,11 +403,6 @@ export default function HomeScreen() {
           <View style={styles.headerButtons}>
             <TouchableOpacity
               style={styles.menuButton}
-              onPress={handleTimetablePress}
-            >
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuButton}
               onPress={handleFavoritesPress}
             >
               <IconSymbol name="star" size={24} color="#666666" />
@@ -469,58 +410,30 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {hasTimetable ? (
-          <View style={styles.twoBoxesContainer}>
-            <View style={styles.box}>
-              {/* 여기: Next Class → 다음 수업 */}
-              <ThemedText style={styles.boxTitle}>인기 강의실</ThemedText>
-              {nextClass ? (
-                <>
-                  <ThemedText style={styles.boxText}>
-                    산격동 캠퍼스 IT대학5호관(IT융복합관) 434
-                  </ThemedText>
-                </>
-              ) : (
-                <ThemedText style={styles.boxText}>
-                  오늘은 수업이 없어요.
-                </ThemedText>
-              )}
-            </View>
-            <View style={styles.box}>
-              <ThemedText style={styles.boxTitle}>가까운 빈 강의실</ThemedText>
-              {nearestClassroom ? (
-                <>
-                  <ThemedText style={styles.boxText}>
-                    {nearestClassroom.name}
-                  </ThemedText>
-                  <ThemedText style={styles.boxSubText}>
-                    {nearestClassroom.distance}
-                  </ThemedText>
-                </>
-              ) : (
-                <ThemedText style={styles.boxText}>불러오는 중...</ThemedText>
-              )}
-            </View>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.timetableCard}
-            onPress={handleTimetablePress}
-          >
-            <View style={styles.timetableIconContainer}>
-              <IconSymbol name="calendar" size={32} color="#666666" />
-              <IconSymbol
-                name="exclamationmark"
-                size={16}
-                color="#FF3B30"
-                style={styles.exclamationIcon}
-              />
-            </View>
-            <ThemedText style={styles.timetableText}>
-              시간표를 추가하세요
+        <View style={styles.twoBoxesContainer}>
+          <View style={styles.box}>
+
+            <ThemedText style={styles.boxTitle}>인기 강의실</ThemedText>
+            <ThemedText style={styles.boxText}>
+              산격동 캠퍼스 IT대학5호관(IT융복합관) 434
             </ThemedText>
-          </TouchableOpacity>
-        )}
+          </View>
+          <View style={styles.box}>
+            <ThemedText style={styles.boxTitle}>가까운 빈 강의실</ThemedText>
+            {nearestClassroom ? (
+              <>
+                <ThemedText style={styles.boxText}>
+                  {nearestClassroom.name}
+                </ThemedText>
+                <ThemedText style={styles.boxSubText}>
+                  {nearestClassroom.distance}
+                </ThemedText>
+              </>
+            ) : (
+              <ThemedText style={styles.boxText}>불러오는 중...</ThemedText>
+            )}
+          </View>
+        </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
